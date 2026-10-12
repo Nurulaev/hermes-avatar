@@ -28,7 +28,9 @@ jobs:
         run: |
           node --check electron/main.js
           node --check electron/preload.js
-          find static -maxdepth 1 -name '*.js' -print0 | xargs -0 -r -I{} node --check {}
+          for f in static/*.js; do
+            node --input-type=module --check < "$f"
+          done
 
       - name: Secret scan (gitleaks)
         uses: gitleaks/gitleaks-action@v2
