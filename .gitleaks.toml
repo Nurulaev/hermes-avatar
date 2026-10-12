@@ -1,0 +1,13 @@
+title = "hermes-avatar gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Vendored third-party minified libraries — not our secrets"
+paths = [
+  '''static/three/.*''',
+  '''static/three-vrm/.*''',
+  '''static/vendor/.*''',
+  '''node_modules/.*''',
+]
