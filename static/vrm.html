@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Гермес VRM</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; color: #9fd8f5; }
+  canvas { display: block; }
+  #hud { position: absolute; top: 10px; left: 12px; font-size: 11px; letter-spacing: .08em; opacity: .55;
+    white-space: pre; pointer-events: none; }
+  #load { position: absolute; top: 50%; width: 100%; text-align: center; opacity: .5; letter-spacing: .3em;
+    pointer-events: none; }
+  body.mini #hud { display: none; }
+
+  #editorToggle { position: absolute; top: 10px; right: 12px; z-index: 5; background: rgba(10,18,26,.55);
+    border: 1px solid #2c5a72; color: #9fd8f5; font: inherit; font-size: 12px; padding: 5px 9px;
+    border-radius: 6px; cursor: pointer; letter-spacing: .05em; }
+  #editorToggle:hover { background: rgba(20,40,55,.75); }
+  body.mini #editorToggle, body.mini #editor { display: none; }
+
+  #editor { position: absolute; top: 44px; right: 12px; width: 280px; max-height: calc(100% - 60px);
+    overflow-y: auto; background: rgba(8,14,20,.82); border: 1px solid #2c5a72; border-radius: 8px;
+    padding: 12px; font-size: 11px; z-index: 5; display: none; }
+  #editor.open { display: block; }
+  #editor h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .1em; opacity: .7; border-bottom: 1px solid #1d3a4a;
+    padding-bottom: 4px; }
+  #editor section { margin-bottom: 12px; }
+  #editor .row { display: flex; align-items: center; justify-content: space-between; margin: 4px 0; gap: 6px; }
+  #editor label { opacity: .85; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #editor input[type=color] { width: 36px; height: 20px; border: none; background: none; cursor: pointer; }
+  #editor input[type=range] { width: 130px; }
+  #editor input[type=checkbox] { cursor: pointer; }
+  #editor button { background: #16313f; color: #9fd8f5; border: 1px solid #2c5a72; border-radius: 5px;
+    font: inherit; font-size: 11px; padding: 5px 8px; cursor: pointer; margin: 2px 2px 2px 0; }
+  #editor button:hover { background: #1f4356; }
+  #editor button.active { background: #2c5a72; color: #fff; }
+  #presets { display: flex; flex-wrap: wrap; }
+  #editor .hint { opacity: .5; font-size: 10px; margin-top: 2px; }
+  #editor .empty { opacity: .5; font-style: italic; }
+  body.bg-transparent, body.bg-cosmos, body.bg-cabinet, body.bg-hud { transition: background .4s; }
+  #bgModes { position: absolute; bottom: 10px; right: 12px; z-index: 5; display: flex; gap: 5px; }
+  body.mini #bgModes, body.mini #toolcallGraph { display: none; }
+  #bgModes button { background: rgba(10,18,26,.55); border: 1px solid #2c5a72; color: #9fd8f5; font: inherit;
+    font-size: 10px; padding: 4px 7px; border-radius: 5px; cursor: pointer; letter-spacing: .04em; }
+  #bgModes button.active { background: #2c5a72; color: #fff; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "/static/three/build/three.module.js",
+  "three/addons/": "/static/three/examples/jsm/",
+  "@pixiv/three-vrm": "/static/three-vrm/three-vrm.module.js"
+} }
+</script>
+<script src="/static/vendor/mermaid.min.js"></script>
+</head>
+<body>
+<div id="load">ЗАГРУЗКА VRM…</div>
+<div id="hud" id="hud"></div>
+<button id="editorToggle" title="Редактор внешности (E)">⚙ ВНЕШНОСТЬ</button>
+<div id="editor">
+  <section>
+    <h3>ПРЕСЕТЫ</h3>
+    <div id="presets"></div>
+  </section>
+  <section>
+    <h3>ЦВЕТ</h3>
+    <div class="row"><label for="colSkin">Кожа</label><input type="color" id="colSkin"></div>
+    <div class="row"><label for="colHair">Волосы</label><input type="color" id="colHair"></div>
+    <div class="row"><label for="colEye">Глаза</label><input type="color" id="colEye"></div>
+  </section>
+  <section>
+    <h3>ПРОПОРЦИИ ЛИЦА</h3>
+    <div id="morphList"></div>
+  </section>
+  <section>
+    <h3>ОДЕЖДА / АКСЕССУАРЫ / ПРИЧЁСКА</h3>
+    <div id="nodeList"></div>
+  </section>
+  <section>
+    <button id="btnOpenFile">Открыть .vrm…</button>
+    <button id="btnSaveLook">Сохранить образ</button>
+    <button id="btnLoadLook">Загрузить образ</button>
+    <div class="hint">Можно перетащить файл .vrm прямо в окно.</div>
+  </section>
+</div>
+<div id="bgModes">
+  <button data-mode="transparent" title="Прозрачный (поверх рабочего стола)">ПРОЗРАЧНЫЙ</button>
+  <button data-mode="cosmos" title="Космос">КОСМОС</button>
+  <button data-mode="cabinet" title="Кабинет">КАБИНЕТ</button>
+  <button data-mode="hud" title="HUD">HUD</button>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import { AvatarMotion } from "/static/avatar-motion.js";
+import { ThoughtSpace, ToolCallGraph, BackgroundModes } from "/static/thought-space.js";
+
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const MODE = qs.get("mode") || "full";          // full | mini | tray(=full, окно скрыто Electron-ом)
+// Кадр: waist — по пояс (видны жесты рук, по умолчанию в full), chest — грудь-голова (mini)
+const FRAME = qs.get("frame") || (MODE === "mini" ? "chest" : "waist");
+const motion = new AvatarMotion();
+document.body.classList.toggle("mini", MODE === "mini");
+const DEFAULT_VRM = qs.get("vrm") || "/assets/hermes.vrm";
+const DEBUG = qs.has("debug");
+
+// ---------- рендерер / сцена ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+try {
+  const gl = renderer.getContext();
+  const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+  window.__glRenderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  console.log("GL renderer:", window.__glRenderer);
+} catch (e) { window.__glRenderer = "err:" + e; }
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.65;
+
+const camera = new THREE.PerspectiveCamera(24, innerWidth / innerHeight, 0.05, 50);
+camera.position.set(0, 1.35, 1.65);
+camera.lookAt(0, 1.3, 0);
+
+const key = new THREE.DirectionalLight(0xfff1e0, 2.4);
+key.position.set(1.4, 2.4, 2.0); key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x7fd4ff, 1.6); rim.position.set(-2.0, 1.6, -1.2); scene.add(rim);
+const fill = new THREE.DirectionalLight(0x9fb8ff, 0.5); fill.position.set(-1.6, 0.4, 1.8); scene.add(fill);
+
+// ---------- постпроцессинг: SSAO + Bloom + SMAA + ACES(через tonemapping) ----------
+let composer, ssaoPass, bloomPass, smaaPass;
+function buildComposer() {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  ssaoPass = new SSAOPass(scene, camera, innerWidth, innerHeight);
+  ssaoPass.kernelRadius = 0.25; ssaoPass.minDistance = 0.001; ssaoPass.maxDistance = 0.1;
+  composer.addPass(ssaoPass);
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.35, 0.6, 0.86);
+  composer.addPass(bloomPass);
+  smaaPass = new SMAAPass(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio());
+  composer.addPass(smaaPass);
+  composer.addPass(new OutputPass());
+}
+buildComposer();
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  if (smaaPass) smaaPass.setSize(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio());
+  thoughtSpace.setSize(innerWidth, innerHeight);
+  toolGraph.resize();
+});
+
+// ---------- Ф4: пространство мыслей (орбитальные панели), граф tool-calls, режимы фона ----------
+const thoughtSpace = new ThoughtSpace(renderer, camera);
+thoughtSpace.setSize(innerWidth, innerHeight);
+const toolGraph = new ToolCallGraph(document.body);
+const bgModes = new BackgroundModes(scene, document.body);
+document.querySelectorAll("#bgModes button").forEach(b => {
+  b.classList.toggle("active", b.dataset.mode === bgModes.mode);
+  b.onclick = () => { bgModes.set(b.dataset.mode); document.querySelectorAll("#bgModes button").forEach(x => x.classList.toggle("active", x === b)); };
+});
+
+// внешний канал: та же SSE /events, что и у toon.html/index3d.html — {type: say|viz|clear|emotion|toolcall}
+function handleSseMsg(m) {
+  if (m.type === "clear") thoughtSpace.clear();
+  else if (m.type === "viz") (m.viz || []).forEach((v, i) => setTimeout(() => thoughtSpace.showViz(v), i * 350));
+  else if (m.type === "say") {
+    // эмоции по фразам: каждая фраза с тегом сменяет набор эмоций; темп ≈ речь (70 мс/символ)
+    let delay = 0;
+    (m.parts || []).forEach(p => {
+      if (p.viz && p.viz.length) p.viz.forEach((v, i) => setTimeout(() => thoughtSpace.showViz(v), delay + i * 350));
+      const emo = p.emo || [], gest = p.gestures || [];
+      setTimeout(() => {
+        if (emo.length) {
+          for (const k of Object.keys(emotionWeights)) if (!emo.some(e => e.name === k)) setEmotion(k, 0);
+          emo.forEach(e => setEmotion(e.name, e.weight));                     // [эмо:имя 0.7]
+        }
+        gest.forEach(g => setGesture(g));                                        // [жест:имя]
+      }, delay);
+      delay += (p.text || "").length * 70;
+    });
+    const p0 = (m.parts || [])[0];
+    if (p0 && !(p0.emo || []).length && p0.emotion) setEmotion(p0.emotion, 1);
+  } else if (m.type === "emotion") setEmotion(m.emotion, m.weight ?? 1);
+  else if (m.type === "gesture") setGesture(m.name);
+  else if (m.type === "motion") playMotion(m.name || m.url, { loop: m.loop });
+  else if (m.type === "toolcall") toolGraph.push(m.stage, m.label);
+}
+try {
+  const es = new EventSource("/events");
+  es.onmessage = e => { try { handleSseMsg(JSON.parse(e.data)); } catch {} };
+} catch (e) { console.warn("SSE недоступен", e); }
+
+
+// ---------- загрузка VRM ----------
+let currentVrm = null;
+let currentModelUrl = DEFAULT_VRM;
+const loader = new GLTFLoader();
+loader.register(parser => new VRMLoaderPlugin(parser));
+
+function disposeVrm(vrm) {
+  if (!vrm) return;
+  scene.remove(vrm.scene);
+  VRMUtils.deepDispose(vrm.scene);
+}
+
+function restPose(vrm) {
+  // T-pose -> нейтральная поза покоя: опускаем руки вдоль тела.
+  const h = vrm.humanoid;
+  if (!h) return;
+  // VRM 0.x смотрит в −Z: зеркалим знак Z-поворота, иначе руки уходят вверх.
+  const s0 = vrm.meta?.metaVersion === "0" ? -1 : 1;
+  const set = (name, x, y, z) => { const b = h.getNormalizedBoneNode(name); if (b) b.rotation.set(x, y, z * s0); };
+  set("leftUpperArm", 0, 0, THREE.MathUtils.degToRad(-68));
+  set("rightUpperArm", 0, 0, THREE.MathUtils.degToRad(68));
+  set("leftLowerArm", 0, 0, THREE.MathUtils.degToRad(-8));
+  set("rightLowerArm", 0, 0, THREE.MathUtils.degToRad(8));
+  set("leftHand", 0, 0, THREE.MathUtils.degToRad(4));
+  set("rightHand", 0, 0, THREE.MathUtils.degToRad(-4));
+}
+
+function frameCamera(vrm) {
+  // Кадр: от груди до макушки с запасом сверху, камера по версии VRM (faceSign).
+  const faceSign = vrm.meta?.metaVersion === "0" ? -1 : 1;
+  window.__faceSign = faceSign;
+  const box = new THREE.Box3().setFromObject(vrm.scene);
+  const headBone = vrm.humanoid?.getNormalizedBoneNode("head");
+  const chestBone = vrm.humanoid?.getNormalizedBoneNode("chest") || vrm.humanoid?.getNormalizedBoneNode("spine");
+  const headW = headBone ? headBone.getWorldPosition(new THREE.Vector3()) : null;
+  const chestW = chestBone ? chestBone.getWorldPosition(new THREE.Vector3()) : null;
+  const hipsBone = vrm.humanoid?.getNormalizedBoneNode("hips");
+  const hipsW = hipsBone ? hipsBone.getWorldPosition(new THREE.Vector3()) : null;
+  const topY = box.max.y;                                  // макушка (+ запас caused by hair)
+  const bottomY = FRAME === "waist" && hipsW ? hipsW.y - 0.04     // по пояс: видны руки и жесты
+    : chestW ? chestW.y - 0.12 : topY - 0.55;              // низ груди
+  const centerY = (topY + bottomY) / 2;
+  const halfExtent = Math.max(0.22, (topY - bottomY) / 2 * 1.18);  // запас 18%
+  const fovRad = THREE.MathUtils.degToRad(camera.fov);
+  const dist = halfExtent / Math.tan(fovRad / 2);
+  window.__headY = (headW ? headW.y : topY).toFixed(3);
+  camera.position.set(0, centerY, dist * faceSign);
+  camera.lookAt(0, centerY, 0);
+  thoughtSpace.setFrame(topY, bottomY, faceSign);
+}
+
+function loadVRM(url) {
+  return new Promise((resolve, reject) => {
+    $("load") && ($("load").textContent = "ЗАГРУЗКА VRM…", $("load").style.display = "block");
+    loader.load(url, gltf => {
+      const vrm = gltf.userData.vrm;
+      VRMUtils.removeUnnecessaryVertices(gltf.scene);
+      VRMUtils.combineSkeletons(gltf.scene);
+      VRMUtils.combineMorphs(vrm);
+      vrm.scene.traverse(o => { o.frustumCulled = false; if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      disposeVrm(currentVrm);
+      currentVrm = vrm;
+      currentModelUrl = url;
+      scene.add(vrm.scene);
+      restPose(vrm);
+      motion.attach(vrm, scene);
+      for (const [n, w] of Object.entries(emotionWeights)) motion.setEmotion(n, w);
+      frameCamera(vrm);
+      window.currentVrm = vrm;
+      if ($("load")) $("load").style.display = "none";
+      rebuildEditorUI(vrm);
+      resolve(vrm);
+    }, undefined, err => { console.error("VRM load error", err); if ($("load")) $("load").textContent = "ОШИБКА ЗАГРУЗКИ VRM"; reject(err); });
+  });
+}
+
+// ---------- публичный API окна ----------
+// Эмоции: happy/sad/angry/relaxed/surprised/neutral + алиасы VRM 0.x (Joy/Sorrow/Fun/Angry), смешиваемые,
+//   плюс осанка тела под эмоцию. Визем: Oculus-15 (sil PP FF TH DD kk CH SS nn RR aa E ih oh ou) или VRM aa/ih/ou/ee/oh,
+//   timeline [{t, viseme, weight, accent?}]; accent — кивок и жест-«удар» рукой.
+// Тело: setGesture(name) — жест рук (wave/explain/point/shrug/think/celebrate/fist/beatL/beatR),
+//   playMotion(name) — движение тела (nod/shake/bow/lookAround/turnLeft/turnRight/stretch/idle/talk).
+const emotionWeights = {};     // целевые веса эмоций {name: weight} — переживают смену модели
+
+function setEmotion(name, weight = 1) {
+  emotionWeights[name] = Math.max(0, Math.min(1, weight));
+  return motion.setEmotion(name, weight);
+}
+function setVisemes(timeline, opt = {}) { return motion.setVisemes(timeline, opt); }
+function setGesture(name, opt = {}) {
+  if (!name) { motion.stop(); return true; }
+  return motion.play(name, opt);
+}
+function playMotion(name, opt = {}) { return motion.play(name, opt); }
+// Озвучить текст: /tts_lips → WAV + фонемный timeline; визем идут по часам самого <audio>.
+let speakAudio = null;
+async function speak(text, opt = {}) {
+  const r = await fetch("/tts_lips", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }) });
+  const d = await r.json();
+  speakAudio?.pause();
+  const a = speakAudio = new Audio("data:audio/wav;base64," + d.audio);
+  a.muted = !!opt.muted;
+  motion.setVisemes(d.timeline, { audio: a });
+  await a.play().catch(() => motion.setVisemes(d.timeline));   // автоплей запрещён — визем по часам страницы
+  return { duration: d.duration, engine: d.engine, align: d.align, visemes: d.timeline.length };
+}
+// взгляд за курсором (в окне; Electron прозрачное окно тоже шлёт pointermove)
+addEventListener("pointermove", e => motion.lookAtCursor(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight * 2 - 1)));
+window.avatar = {
+  setEmotion, setVisemes, setGesture, playMotion, speak, loadVRM,
+  stopMotion: name => motion.stop(name),
+  getState: () => motion.state(),
+  motion,
+  showViz: v => thoughtSpace.showViz(v),
+  clearViz: () => thoughtSpace.clear(),
+  pushToolcall: (stage, label) => toolGraph.push(stage, label),
+  clearToolcalls: () => toolGraph.clear(),
+  setBgMode: m => bgModes.set(m),
+  getBgMode: () => bgModes.mode,
+};
+
+// ---------- Ф2: редактор внешности, пресеты, look.json ----------
+const lookState = { model: DEFAULT_VRM, colors: {}, morphs: {}, preset: null };
+
+const COLOR_CATS = { skin: /_SKIN(\s|$)/i, hair: /_HAIR(\s|$)/i, eye: /eye|iris/i };
+let colorTargets = { skin: [], hair: [], eye: [] };
+
+function rebuildColorTargets(vrm) {
+  colorTargets = { skin: [], hair: [], eye: [] };
+  if (!vrm) return;
+  const seen = new Set();
+  vrm.scene.traverse(o => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m || seen.has(m.uuid)) continue;
+      const label = m.name || "";
+      for (const [cat, re] of Object.entries(COLOR_CATS)) {
+        if (re.test(label)) { colorTargets[cat].push(m); seen.add(m.uuid); break; }
+      }
+    }
+  });
+}
+function applyColor(cat, hex) {
+  if (!hex) return;
+  // MToonMaterial.color — алиас на uniforms.litFactor, но фактический рендер альбедо идёт через
+  // uniforms.diffuse (стандартный three.js common-чанк) + uniforms.shadeColorFactor (теневая зона
+  // тона); красим все три, иначе тон визуально не меняется, хотя .color обновляется корректно.
+  const c = new THREE.Color(hex);
+  (colorTargets[cat] || []).forEach(m => {
+    if (m.color) m.color.set(hex);
+    const u = m.uniforms;
+    if (u?.diffuse) u.diffuse.value.copy(c);
+    if (u?.shadeColorFactor) u.shadeColorFactor.value.copy(c);
+  });
+  lookState.colors[cat] = hex;
+}
+function resetColors() {
+  // возврат к исходному тону текстуры перед наложением нового пресета/сохранённого цвета —
+  // без этого смена пресета на той же модели копит старый тон (diffuse не самовосстанавливается).
+  for (const cat of Object.keys(colorTargets)) {
+    (colorTargets[cat] || []).forEach(m => {
+      if (m.color) m.color.set(0xffffff);
+      const u = m.uniforms;
+      if (u?.diffuse) u.diffuse.value.setRGB(1, 1, 1);
+      if (u?.shadeColorFactor) u.shadeColorFactor.value.setRGB(1, 1, 1);
+    });
+  }
+  lookState.colors = {};
+}
+
+// Пропорции лица через масштаб костей — работает на любой humanoid-VRM независимо от
+// того, есть ли у модели собственные custom-blendshape'ы (у большинства VRoid-авы их нет).
+const BONE_MORPHS = {
+  "bone:head": { bones: ["head"], min: 0.82, max: 1.22, label: "Голова" },
+  "bone:eyes": { bones: ["leftEye", "rightEye"], min: 0.6, max: 1.6, label: "Глаза" },
+  "bone:jaw": { bones: ["jaw"], min: 0.7, max: 1.4, label: "Челюсть" },
+};
+function applyBoneMorph(key, value) {
+  const spec = BONE_MORPHS[key];
+  if (!spec || !currentVrm?.humanoid) return;
+  for (const n of spec.bones) {
+    const b = currentVrm.humanoid.getNormalizedBoneNode(n);
+    if (b) b.scale.setScalar(value);
+  }
+  lookState.morphs[key] = value;
+}
+
+const RESERVED_EXPR = new Set(["happy", "sad", "angry", "relaxed", "surprised", "neutral",
+  "blink", "blinkleft", "blinkright", "aa", "ih", "ou", "ee", "oh",
+  "lookup", "lookdown", "lookleft", "lookright"]);
+function customExpressionNames(vrm) {
+  const em = vrm?.expressionManager; if (!em) return [];
+  const names = (em.expressions || []).map(e => e.expressionName || e.name).filter(Boolean);
+  return [...new Set(names)].filter(n => !RESERVED_EXPR.has(n.toLowerCase()));
+}
+function applyCustomMorph(name, value) {
+  currentVrm?.expressionManager?.setValue(name, value);
+  lookState.morphs[name] = value;
+}
+
+// VRoid-экспорт именует материалы по шаблону "...<Категория>_NN_CLOTH|HAIR" (Tops/Bottoms/Shoes/
+// Outer/Hair и т.п.) — группируем меш-ноды по этой категории, т.к. у одной категории обычно
+// десятки отдельных подмешей (baked-материалы), а переключать нужно по смыслу «одежда целиком».
+function swappableGroups(vrm) {
+  const groups = {}; // label -> Set<mesh>
+  if (!vrm) return groups;
+  vrm.scene.traverse(o => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m?.name) continue;
+      const mm = m.name.match(/_([A-Za-z]+)_\d+_(CLOTH|HAIR|ACCESSORY)\b/i);
+      if (!mm) continue;
+      const label = /^HAIR/i.test(mm[2]) ? "Причёска" : mm[1];
+      (groups[label] || (groups[label] = new Set())).add(o);
+    }
+  });
+  return groups;
+}
+
+function buildPresetButtons() {
+  const box = $("presets"); box.innerHTML = "";
+  for (const name of Object.keys(PRESETS)) {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.onclick = () => applyPreset(name);
+    b.dataset.preset = name;
+    box.appendChild(b);
+  }
+}
+function buildMorphList(vrm) {
+  const box = $("morphList"); box.innerHTML = "";
+  for (const [key, spec] of Object.entries(BONE_MORPHS)) {
+    box.appendChild(sliderRow(spec.label, key, spec.min, spec.max, lookState.morphs[key] ?? 1, applyBoneMorph));
+  }
+  const custom = customExpressionNames(vrm);
+  if (!custom.length) {
+    const d = document.createElement("div"); d.className = "empty";
+    d.textContent = "у этой модели нет доп. blendshape-пропорций — доступны только Ф-слайдеры выше";
+    box.appendChild(d);
+  } else {
+    for (const name of custom) {
+      box.appendChild(sliderRow(name, name, 0, 1, lookState.morphs[name] ?? 0, applyCustomMorph));
+    }
+  }
+}
+function sliderRow(label, key, min, max, value, applyFn) {
+  const row = document.createElement("div"); row.className = "row";
+  const lab = document.createElement("label"); lab.textContent = label; lab.title = key;
+  const inp = document.createElement("input");
+  inp.type = "range"; inp.min = min; inp.max = max; inp.step = 0.01; inp.value = value;
+  inp.oninput = () => applyFn(key, parseFloat(inp.value));
+  row.appendChild(lab); row.appendChild(inp);
+  return row;
+}
+function buildNodeList(vrm) {
+  const box = $("nodeList"); box.innerHTML = "";
+  const groups = swappableGroups(vrm);
+  const labels = Object.keys(groups);
+  if (!labels.length) {
+    const d = document.createElement("div"); d.className = "empty";
+    d.textContent = "в этой модели нет отдельных сменных узлов одежды/аксессуаров";
+    box.appendChild(d);
+    return;
+  }
+  for (const label of labels) {
+    const meshes = [...groups[label]];
+    const key = "@node:" + label;
+    const visible = lookState.morphs[key] !== undefined ? !!lookState.morphs[key] : true;
+    meshes.forEach(o => { o.visible = visible; });
+    lookState.morphs[key] = visible ? 1 : 0;
+    const row = document.createElement("div"); row.className = "row";
+    const lab = document.createElement("label"); lab.textContent = label;
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = visible;
+    cb.onchange = () => { meshes.forEach(o => { o.visible = cb.checked; }); lookState.morphs[key] = cb.checked ? 1 : 0; };
+    row.appendChild(lab); row.appendChild(cb);
+    box.appendChild(row);
+  }
+}
+function syncColorInputs() {
+  if (lookState.colors.skin) $("colSkin").value = lookState.colors.skin;
+  if (lookState.colors.hair) $("colHair").value = lookState.colors.hair;
+  if (lookState.colors.eye) $("colEye").value = lookState.colors.eye;
+}
+function rebuildEditorUI(vrm) {
+  rebuildColorTargets(vrm);
+  buildMorphList(vrm);
+  buildNodeList(vrm);
+  syncColorInputs();
+}
+
+// Пресеты из ТЗ: «Гермес» — текущий фирменный образ (щетина/шрам/загар, см. tools/brutalize.py),
+// «нейтральный» — немодифицированная модель, «Иллидан» — тот же мэш, но демонический тон кожи/глаз.
+const PRESETS = {
+  "Гермес": { model: "/assets/hermes.vrm", colors: {}, morphs: {} },
+  "Иллидан": { model: "/assets/hermes.vrm", colors: { skin: "#2f5c3a", hair: "#141a12", eye: "#39ff6a" }, morphs: {} },
+  "нейтральный": { model: "/assets/hermes-clean.vrm", colors: {}, morphs: {} },
+};
+
+async function applyPreset(name) {
+  const p = PRESETS[name]; if (!p) return;
+  if (p.model && p.model !== currentModelUrl) await loadVRM(p.model).catch(() => {});
+  else rebuildColorTargets(currentVrm);
+  resetColors();
+  for (const [cat, hex] of Object.entries(p.colors || {})) applyColor(cat, hex);
+  for (const key of Object.keys(BONE_MORPHS)) applyBoneMorph(key, (p.morphs || {})[key] ?? 1);
+  lookState.preset = name;
+  buildMorphList(currentVrm); buildNodeList(currentVrm); syncColorInputs();
+  document.querySelectorAll("#presets button").forEach(b => b.classList.toggle("active", b.dataset.preset === name));
+}
+
+async function saveLook() {
+  lookState.model = currentModelUrl;
+  if (window.avatarLook?.save) { await window.avatarLook.save(lookState); flashButton("btnSaveLook", "Сохранено ✓"); }
+}
+async function loadSavedLook() {
+  if (!window.avatarLook?.load) return;
+  const saved = await window.avatarLook.load();
+  if (!saved) { flashButton("btnLoadLook", "нет сохранённого образа"); return; }
+  await applySavedLook(saved);
+  flashButton("btnLoadLook", "Загружено ✓");
+}
+async function applySavedLook(saved) {
+  if (saved.model && saved.model !== currentModelUrl) await loadVRM(saved.model).catch(() => {});
+  lookState.morphs = saved.morphs || {};
+  lookState.preset = saved.preset || null;
+  rebuildColorTargets(currentVrm);
+  resetColors();
+  for (const [cat, hex] of Object.entries(saved.colors || {})) applyColor(cat, hex);
+  for (const [key, value] of Object.entries(lookState.morphs)) {
+    if (BONE_MORPHS[key]) applyBoneMorph(key, value);
+    else if (key.startsWith("@node:")) { /* применится при buildNodeList ниже из lookState.morphs */ }
+    else applyCustomMorph(key, value);
+  }
+  buildMorphList(currentVrm); buildNodeList(currentVrm); syncColorInputs();
+}
+function flashButton(id, text) {
+  const b = $(id); if (!b) return;
+  const orig = b.textContent; b.textContent = text;
+  setTimeout(() => { b.textContent = orig; }, 1400);
+}
+
+buildPresetButtons();
+$("editorToggle").onclick = () => $("editor").classList.toggle("open");
+$("colSkin").oninput = e => applyColor("skin", e.target.value);
+$("colHair").oninput = e => applyColor("hair", e.target.value);
+$("colEye").oninput = e => applyColor("eye", e.target.value);
+$("btnSaveLook").onclick = saveLook;
+$("btnLoadLook").onclick = loadSavedLook;
+$("btnOpenFile").onclick = async () => {
+  if (!window.avatarLook?.pickVRM) return;
+  const srcPath = await window.avatarLook.pickVRM();
+  if (!srcPath) return;
+  const url = await window.avatarLook.importVRM(srcPath);
+  if (url) await loadVRM(url).catch(() => {});
+};
+addEventListener("keydown", e => { if (e.key === "e" || e.key === "E") $("editor").classList.toggle("open"); });
+
+async function initLook() {
+  await loadVRM(DEFAULT_VRM).catch(() => {});
+  const saved = window.avatarLook?.load ? await window.avatarLook.load() : null;
+  if (saved) await applySavedLook(saved);
+}
+initLook();
+
+// ---------- живость: моргание (остальное — дыхание, взгляд, тело, речь — в avatar-motion.js) ----------
+let blink = 0, nextBlink = performance.now() + 1500, blinkDouble = false;
+
+// ---------- адаптивное качество под 60 fps ----------
+const quality = { level: 2, lastCheck: performance.now(), avg: 60 };
+function applyQuality(l) {
+  quality.level = l;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, l >= 2 ? 2 : l >= 1 ? 1.25 : 1));
+  if (ssaoPass) ssaoPass.enabled = l >= 1;
+  if (bloomPass) bloomPass.enabled = l >= 1;
+  if (smaaPass) smaaPass.enabled = l >= 2;
+  renderer.shadowMap.enabled = l >= 1;
+}
+function adaptQuality(dt) {
+  const fps = 1 / dt;
+  quality.avg += (fps - quality.avg) * 0.05;
+  if (performance.now() - quality.lastCheck < 2000) return;
+  quality.lastCheck = performance.now();
+  if (quality.avg < 55 && quality.level > 0) applyQuality(quality.level - 1);
+  else if (quality.avg > 59 && quality.level < 2) applyQuality(quality.level + 1);
+}
+
+// ---------- fps hud ----------
+let fAcc = 0, fN = 0, fpsShown = 0;
+function updateHud(dt) {
+  fAcc += dt; fN++;
+  if (fAcc >= 0.5) { fpsShown = Math.round(fN / fAcc); fAcc = 0; fN = 0; }
+  if ($("hud")) $("hud").textContent = `FPS ${fpsShown}  Q${quality.level}  PR${renderer.getPixelRatio().toFixed(2)}  ${window.__glRenderer || ""}`;
+  if (DEBUG) window.__fps = fpsShown;
+}
+
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, clock.getDelta());
+  const ts = performance.now() / 1000;
+
+  if (currentVrm) {
+    const em = currentVrm.expressionManager;
+    if (em) {
+      // моргание
+      if (performance.now() > nextBlink) {
+        blink = 1; nextBlink = performance.now() + (blinkDouble ? 260 : 1800 + Math.random() * 4200);
+        blinkDouble = !blinkDouble && Math.random() < 0.18;
+      }
+      blink = Math.max(0, blink - dt * 7.5);
+      const bk = blink > 0 ? Math.sin(blink * Math.PI) : 0;
+      em.setValue("blink", bk);
+    }
+    // эмоции, визем с коартикуляцией, idle тела, взгляд, жесты, повороты головы/корпуса
+    motion.update(dt, ts);
+    currentVrm.update(dt);
+  }
+
+  adaptQuality(dt);
+  updateHud(dt);
+  composer.render();
+  thoughtSpace.update(dt);
+  toolGraph.update(dt);
+}
+requestAnimationFrame(frame);
+
+// drag&drop VRM: в Electron получаем реальный путь (webUtils) и копируем файл в assets/imported,
+// чтобы URL был стабильным и сохранялся в look.json между перезапусками; без Electron — fallback blob.
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", async e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!f || !f.name.toLowerCase().endsWith(".vrm")) return;
+  const srcPath = window.hermesShell?.getPathForFile?.(f);
+  if (srcPath && window.avatarLook?.importVRM) {
+    const url = await window.avatarLook.importVRM(srcPath);
+    if (url) { await loadVRM(url).catch(() => {}); return; }
+  }
+  loadVRM(URL.createObjectURL(f));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+node_modules/
+__pycache__/
+*.pyc
+
+# runtime logs
+*.log
+
+# backups created during dev sessions
+*.bak-*
+
+# local secrets / machine-specific config
+.env
+look.json
+
+# Piper TTS voice models (large, downloaded by scripts/download-voices.sh)
+voices/*.onnx
+
+# Third-party VRM avatar samples with unclear/non-redistributable licensing
+# (fetched by scripts/download-assets.sh instead of being committed)
+assets/male/
+assets/hermes-clean.vrm
+assets/hermes-female-sample.vrm
+
+# proof artifacts that may contain raw mic captures / local audio
+proofs/**/*.raw
+proofs/**/*.wav

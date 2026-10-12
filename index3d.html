@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Гермес 3D</title>
+<style>
+  html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50% 40%, #16202a 0%, #05080b 70%); overflow: hidden;
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; color: #9fd8f5; }
+  canvas { display: block; }
+  #status { position: absolute; top: 18px; left: 22px; font-size: 13px; letter-spacing: .2em; opacity: .75; }
+  #emo { position: absolute; top: 18px; right: 22px; font-size: 13px; letter-spacing: .2em; opacity: .55; }
+  #sub { position: absolute; bottom: 6vh; left: 10vw; right: 10vw; text-align: center; font-size: 20px;
+    line-height: 1.45; min-height: 3em; opacity: .92; text-shadow: 0 2px 8px #000; }
+  #you { position: absolute; bottom: 2vh; left: 10vw; right: 10vw; text-align: center; font-size: 13px; opacity: .45; }
+  #start { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 14vh;
+    box-sizing: border-box; background: rgba(5,8,11,.25); font-size: 18px; letter-spacing: .25em; cursor: pointer; }
+  #load { position: absolute; top: 50%; width: 100%; text-align: center; opacity: .5; letter-spacing: .3em; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "/static/three/build/three.module.js", "three/addons/": "/static/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="load">ЗАГРУЗКА ЛИЦА…</div>
+<div id="status">ОЖИДАНИЕ</div>
+<div id="emo">НЕЙТРАЛЬНО</div>
+<div id="sub"></div>
+<div id="you"></div>
+<div id="start">НАЖМИ, ЧТОБЫ РАЗБУДИТЬ ГЕРМЕСА</div>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+const $ = id => document.getElementById(id);
+const LOOK = new URLSearchParams(location.search).get("look") || "illidan";   // illidan | hermes
+
+// ---------- сцена ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.55;
+
+const camera = new THREE.PerspectiveCamera(22, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 0.05, 4.4);
+
+const key = new THREE.DirectionalLight(0xfff1e0, 2.2); key.position.set(1.6, 1.4, 2.5); scene.add(key);
+const rim = new THREE.DirectionalLight(0x7fd4ff, 2.0); rim.position.set(-2.2, 0.8, -1.5); scene.add(rim);
+const fill = new THREE.DirectionalLight(0x9fb8ff, 0.5); fill.position.set(-2, -0.5, 2); scene.add(fill);
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- модель (ARKit 52 blendshapes) ----------
+let face = null, eyeL = null, eyeR = null, root = null;
+const ktx2 = new KTX2Loader().setTranscoderPath("/static/three/examples/jsm/libs/basis/").detectSupport(renderer);
+new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder).load("/static/facecap.glb", gltf => {
+  root = gltf.scene.children[0];
+  scene.add(root);
+  root.traverse(o => {
+    if (o.isMesh && o.morphTargetDictionary && o.morphTargetDictionary.jawOpen !== undefined) face = o;
+  });
+  eyeL = root.getObjectByName("grp_eyeLeft");
+  eyeR = root.getObjectByName("grp_eyeRight");
+  // центрирование
+  const box = new THREE.Box3().setFromObject(root), c = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3()).y;
+  root.position.sub(c); camera.position.z = size * 2.35; camera.position.y = size * 0.03;
+  window.headSize = size; window.root = root; window.face = face; window.THREE = THREE;
+  // тон кожи поверх серого альбедо + мягкий подповерхностный «блеск»
+  if (face.material) {
+    const m = face.material;
+    face.material = new THREE.MeshPhysicalMaterial({ map: m.map, normalMap: m.normalMap, color: 0xf0c4a8,
+      roughness: 0.58, sheen: 0.35, sheenColor: new THREE.Color(0xff9a7a), sheenRoughness: 0.6, envMapIntensity: 0.7 });
+  }
+  if (LOOK === "illidan") {
+    face.material.color.set(ILL.skin); face.material.sheenColor.set(ILL.sheen); face.material.roughness = 0.5;
+    Object.assign(HAIR, ILL.hair);
+  }
+  try { buildHair(face); } catch (e) { console.error("hair", e); }
+  if (LOOK === "illidan") try { buildIllidan(face); } catch (e) { console.error("illidan", e); }
+  $("load").remove();
+}, undefined, e => { $("load").textContent = "ОШИБКА ЗАГРУЗКИ МОДЕЛИ"; console.error(e); });
+
+// ---------- причёска: оболочка над скальпом, вырезанная из меша головы ----------
+const HAIR = { color: 0x2a1c14, front: 0.80, side: 0.66, back: 0.30, thick: 0.035, fade: 0.06 };
+function buildHair(face) {
+  root.updateMatrixWorld(true);
+  const g = face.geometry, P = g.attributes.position, N = g.attributes.normal, idx = g.index;
+  const M = face.matrixWorld, Mi = M.clone().invert(), Nm = new THREE.Matrix3().getNormalMatrix(M);
+  const n = P.count, wp = new Float32Array(n * 3), wn = new Float32Array(n * 3);
+  const box = new THREE.Box3(), v = new THREE.Vector3(), nv = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    v.fromBufferAttribute(P, i).applyMatrix4(M); box.expandByPoint(v); v.toArray(wp, i * 3);
+    nv.fromBufferAttribute(N, i).applyMatrix3(Nm).normalize(); nv.toArray(wn, i * 3);
+  }
+  // сварка швов: одинаковые позиции → общая нормаль и общий шум, иначе оболочка рвётся
+  const key = i => `${Math.round(wp[i*3]*1e4)},${Math.round(wp[i*3+1]*1e4)},${Math.round(wp[i*3+2]*1e4)}`;
+  const grp = new Map();
+  for (let i = 0; i < n; i++) { const k = key(i); if (!grp.has(k)) grp.set(k, []); grp.get(k).push(i); }
+  const rnd = new Float32Array(n), rnd2 = new Float32Array(n);
+  for (const ids of grp.values()) {
+    nv.set(0, 0, 0); for (const i of ids) { nv.x += wn[i*3]; nv.y += wn[i*3+1]; nv.z += wn[i*3+2]; }
+    nv.normalize(); const r = Math.random(), r2 = Math.random();
+    for (const i of ids) { nv.toArray(wn, i * 3); rnd[i] = r; rnd2[i] = r2; }
+  }
+  const lo = box.min, sz = box.getSize(new THREE.Vector3()), cx = (box.min.x + box.max.x) / 2;
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // маска: >0 — волосы; линия роста зависит от положения спереди/сбоку/сзади
+  const w = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = wp[i * 3], y = (wp[i * 3 + 1] - lo.y) / sz.y, z = (wp[i * 3 + 2] - lo.z) / sz.z;
+    const ax = Math.abs(x - cx) / (sz.x / 2);
+    let th = THREE.MathUtils.lerp(HAIR.back, HAIR.side, sstep(0.25, 0.55, z));
+    th = THREE.MathUtils.lerp(th, HAIR.front, sstep(0.55, 0.85, z) * (1 - sstep(0.55, 0.95, ax)) );
+    // залысины-«углы» у висков чуть выше
+    th += 0.03 * sstep(0.6, 0.9, z) * sstep(0.35, 0.6, ax) * (1 - sstep(0.75, 0.95, ax));
+    w[i] = sstep(th - HAIR.fade, th + HAIR.fade * 0.5, y);
+    // не трогаем уши: они торчат за контур черепа по X
+    w[i] *= 1 - sstep(0.84, 0.92, ax) * (1 - sstep(0.62, 0.72, y));
+  }
+  const pos = [], nor = [], col = [], tri = [], map = new Int32Array(n).fill(-1);
+  const c0 = new THREE.Color(HAIR.color);
+  const T = idx ? idx.count / 3 : n / 3;
+  for (let t = 0; t < T; t++) {
+    const a = idx ? idx.getX(t * 3) : t * 3, b = idx ? idx.getX(t * 3 + 1) : t * 3 + 1, c = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    if (Math.max(w[a], w[b], w[c]) < 0.02) continue;
+    for (const k of [a, b, c]) {
+      if (map[k] < 0) {
+        map[k] = pos.length / 3;
+        const top = (wp[k * 3 + 1] - lo.y) / sz.y;
+        const d = HAIR.thick * sz.y * (0.15 + 0.85 * w[k]) * (0.9 + 0.2 * rnd[k]) * (0.8 + 0.7 * sstep(0.7, 1.0, top));
+        v.fromArray(wp, k * 3).addScaledVector(nv.fromArray(wn, k * 3), d).applyMatrix4(Mi);
+        pos.push(v.x, v.y, v.z);
+        const s = 0.75 + 0.35 * rnd2[k];
+        col.push(c0.r * s, c0.g * s, c0.b * s);
+      }
+      tri.push(map[k]);
+    }
+  }
+  const hg = new THREE.BufferGeometry();
+  hg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  hg.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  hg.setIndex(tri); hg.computeVertexNormals();
+  // альфа по краю: рваная линия роста
+  const al = new Float32Array(pos.length / 3);
+  for (let k = 0; k < n; k++) if (map[k] >= 0) al[map[k]] = w[k];
+  hg.setAttribute("hairW", new THREE.BufferAttribute(al, 1));
+  const mat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.62, sheen: 0.6,
+    sheenColor: new THREE.Color(0x8a6a50), sheenRoughness: 0.45, envMapIntensity: 0.5, transparent: true, depthWrite: true });
+  mat.onBeforeCompile = sh => {
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float hairW; varying float vW; varying vec3 vP;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvW = hairW; vP = position;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vW; varying vec3 vP;\nfloat h13(vec3 p){p=fract(p*.1031);p+=dot(p,p.zyx+31.32);return fract((p.x+p.y)*p.z);}")
+      .replace("#include <dithering_fragment>", `#include <dithering_fragment>
+        float nz = h13(floor(vP * 900.0));
+        float edge = smoothstep(0.0, 1.0, vW * 1.6 - nz * 0.6);
+        if (edge < 0.08) discard;
+        gl_FragColor.a *= edge;
+        gl_FragColor.rgb *= 0.82 + 0.25 * h13(floor(vP * vec3(2400.0, 260.0, 2400.0)));`);
+  };
+  const hair = new THREE.Mesh(hg, mat);
+  hair.name = "hair"; hair.renderOrder = 2;
+  face.add(hair);
+  window.hair = hair;
+}
+
+// ---------- образ Иллидана: повязка, светящиеся глаза, длинные волосы, рога ----------
+const ILL = {
+  skin: 0x9a78c0, sheen: 0xc8a0ff,
+  hair: { color: 0x0c0a10, front: 0.78, side: 0.62, back: 0.28, thick: 0.03 },
+  glow: 0x7dff3a, cam: 2.75,
+  band: { lo: -0.072, hi: 0.088, thick: 0.009 },          // относительно уровня глаз, в долях высоты головы
+  strands: 170, hornColor: [0x2e1c12, 0x9a7a58],
+};
+function weldedWorld(face) {
+  root.updateMatrixWorld(true);
+  const g = face.geometry, P = g.attributes.position, N = g.attributes.normal;
+  const M = face.matrixWorld, Nm = new THREE.Matrix3().getNormalMatrix(M);
+  const n = P.count, wp = new Float32Array(n * 3), wn = new Float32Array(n * 3);
+  const box = new THREE.Box3(), v = new THREE.Vector3(), nv = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    v.fromBufferAttribute(P, i).applyMatrix4(M); box.expandByPoint(v); v.toArray(wp, i * 3);
+    nv.fromBufferAttribute(N, i).applyMatrix3(Nm).normalize(); nv.toArray(wn, i * 3);
+  }
+  const grp = new Map();
+  for (let i = 0; i < n; i++) {
+    const k = `${Math.round(wp[i*3]*1e4)},${Math.round(wp[i*3+1]*1e4)},${Math.round(wp[i*3+2]*1e4)}`;
+    if (!grp.has(k)) grp.set(k, []); grp.get(k).push(i);
+  }
+  for (const ids of grp.values()) {
+    nv.set(0, 0, 0); for (const i of ids) { nv.x += wn[i*3]; nv.y += wn[i*3+1]; nv.z += wn[i*3+2]; }
+    nv.normalize(); for (const i of ids) nv.toArray(wn, i * 3);
+  }
+  return { wp, wn, box, n, M, Mi: M.clone().invert() };
+}
+const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+function buildIllidan(face) {
+  const { wp, wn, box, n, Mi } = weldedWorld(face);
+  const lo = box.min, sz = box.getSize(new THREE.Vector3()), cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
+  const g = face.geometry, idx = g.index, v = new THREE.Vector3(), nv = new THREE.Vector3();
+  camera.position.z = headSize * ILL.cam; camera.position.y = headSize * 0.06;
+  const eyeW = ["grp_eyeLeft", "grp_eyeRight"].map(nm => root.getObjectByName(nm).getWorldPosition(new THREE.Vector3()));
+  const eyN = ((eyeW[0].y + eyeW[1].y) / 2 - lo.y) / sz.y;
+
+  // --- 1. повязка: оболочка из полосы меша на уровне глаз, морфится вместе с лицом
+  const B = ILL.band, inBand = new Uint8Array(n), bY = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = wp[i*3], y = (wp[i*3+1] - lo.y) / sz.y, ax = Math.abs(x - cx) / (sz.x / 2);
+    const sag = 0.025 * sstep(0.3, 0.9, ax);                 // к вискам полоса чуть ниже
+    const ear = ax > 0.86 && y < 0.68;
+    bY[i] = y - eyN + sag; inBand[i] = !ear && bY[i] > B.lo - 0.03 && bY[i] < B.hi + 0.03 ? 1 : 0;
+  }
+  const map = new Int32Array(n).fill(-1), pos = [], tri = [], src = [];
+  const T = idx.count / 3;
+  for (let t = 0; t < T; t++) {
+    const a = idx.getX(t*3), b = idx.getX(t*3+1), c = idx.getX(t*3+2);
+    if (!(inBand[a] || inBand[b] || inBand[c])) continue;
+    for (const k of [a, b, c]) {
+      if (map[k] < 0) {
+        map[k] = src.length; src.push(k);
+        v.fromArray(wp, k*3).addScaledVector(nv.fromArray(wn, k*3), B.thick * sz.y).applyMatrix4(Mi);
+        pos.push(v.x, v.y, v.z);
+      }
+      tri.push(map[k]);
+    }
+  }
+  const bg = new THREE.BufferGeometry();
+  bg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); bg.setIndex(tri);
+  bg.setAttribute("bandY", new THREE.Float32BufferAttribute(src.map(k => bY[k]), 1));
+  bg.morphAttributes.position = g.morphAttributes.position.map(ma => {
+    const arr = new Float32Array(src.length * 3);
+    src.forEach((k, j) => { arr[j*3] = ma.getX(k); arr[j*3+1] = ma.getY(k); arr[j*3+2] = ma.getZ(k); });
+    return new THREE.Float32BufferAttribute(arr, 3);
+  });
+  bg.morphTargetsRelative = true; bg.computeVertexNormals();
+  const eyeL = face.worldToLocal(eyeW[0].clone()), eyeR = face.worldToLocal(eyeW[1].clone());
+  const bandU = { uEyeL: { value: eyeL }, uEyeR: { value: eyeR }, uGlow: { value: 1 } };
+  const bmat = new THREE.MeshPhysicalMaterial({ color: 0x0a080d, roughness: 0.82, sheen: 0.5,
+    sheenColor: new THREE.Color(0x3c3050), sheenRoughness: 0.5, envMapIntensity: 0.4, side: THREE.DoubleSide });
+  bmat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, bandU);
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float bandY; varying float vBY; varying vec3 vLP;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvLP = position; vBY = bandY;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vLP; varying float vBY; uniform vec3 uEyeL, uEyeR; uniform float uGlow;")
+      .replace("#include <clipping_planes_fragment>", `#include <clipping_planes_fragment>\nif (vBY < ${B.lo.toFixed(4)} || vBY > ${B.hi.toFixed(4)}) discard;`)
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+        float r = ${(0.2 * sz.y / 3.3).toFixed(4)};
+        float dl = length(vLP.xy - uEyeL.xy), dr = length(vLP.xy - uEyeR.xy);
+        float gl = exp(-dl*dl/(r*r)) + exp(-dr*dr/(r*r));
+        totalEmissiveRadiance += vec3(0.32, 1.0, 0.12) * gl * 0.55 * uGlow;
+        diffuseColor.rgb *= 0.85 + 0.3 * abs(sin(vLP.x * 160.0) * sin(vLP.y * 160.0));`);
+  };
+  const band = new THREE.Mesh(bg, bmat);
+  band.name = "blindfold"; band.renderOrder = 3;
+  band.morphTargetDictionary = face.morphTargetDictionary; band.morphTargetInfluences = face.morphTargetInfluences;
+  face.add(band);
+
+  // --- 2. глаза: светящиеся + ореол-спрайты + зелёный свет на лицо
+  const glowCol = new THREE.Color(ILL.glow);
+  for (const nm of ["grp_eyeLeft", "grp_eyeRight"]) root.getObjectByName(nm).traverse(o => {
+    if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.55, 1.6, 0.3) });
+  });
+  const cv = document.createElement("canvas"); cv.width = cv.height = 128;
+  const cx2 = cv.getContext("2d"), gr = cx2.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, "rgba(220,255,200,1)"); gr.addColorStop(0.18, "rgba(125,255,58,.85)");
+  gr.addColorStop(0.5, "rgba(80,220,40,.22)"); gr.addColorStop(1, "rgba(40,160,20,0)");
+  cx2.fillStyle = gr; cx2.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(cv);
+  const sprites = [], lights = [];
+  eyeW.forEach((p, i) => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    const lp = face.worldToLocal(p.clone().add(new THREE.Vector3(0, 0, 0.32 * sz.y / 3.3)));
+    s.position.copy(lp); s.scale.setScalar(0.62 * sz.y / 3.3); s.renderOrder = 10;
+    face.add(s); sprites.push(s);
+    const L = new THREE.PointLight(glowCol, 1.0, 2.2 * sz.y / 3.3, 2);
+    L.position.copy(face.worldToLocal(p.clone().add(new THREE.Vector3(0, -0.05, 0.45 * sz.y / 3.3))));
+    face.add(L); lights.push(L);
+  });
+
+  // --- 3. длинные волосы: ленты от скальпа, ложатся по огибающей черепа и падают вниз
+  const AB = 48, YB = 48, env = Array.from({ length: AB }, () => new Float32Array(YB));
+  const abin = a => ((Math.floor((a + Math.PI) / (2 * Math.PI) * AB) % AB) + AB) % AB;
+  const ybin = y => Math.min(YB - 1, Math.max(0, Math.floor((y - lo.y) / sz.y * YB)));
+  for (let i = 0; i < n; i++) {
+    const dx = wp[i*3] - cx, dz = wp[i*3+2] - cz, a = abin(Math.atan2(dx, dz)), yb = ybin(wp[i*3+1]);
+    env[a][yb] = Math.max(env[a][yb], Math.hypot(dx, dz));
+  }
+  for (const e of env) for (let y = YB - 2; y >= 0; y--) e[y] = Math.max(e[y], e[y + 1]);   // огибающая сверху вниз
+  const envR = (ang, y) => { const a = abin(ang), b = (a + 1) % AB, c = (a + AB - 1) % AB, yb = ybin(y);
+    return Math.max(env[a][yb], env[b][yb], env[c][yb]); };
+  const strandGeos = [], rnd = mulberry(7), seeds = [];
+  for (let i = 0; i < n; i++) {
+    const y = (wp[i*3+1] - lo.y) / sz.y; if (y < 0.7) continue;
+    const ang = Math.atan2(wp[i*3] - cx, wp[i*3+2] - cz);     // 0 — вперёд
+    if (Math.abs(ang) < 0.8) continue;                          // лицо открыто
+    seeds.push(i);
+  }
+  for (let s = 0; s < ILL.strands; s++) {
+    const i = seeds[Math.floor(rnd() * seeds.length)];
+    const p0 = new THREE.Vector3().fromArray(wp, i*3);
+    const ang0 = Math.atan2(p0.x - cx, p0.z - cz) + (rnd() - 0.5) * 0.06;
+    const len = (0.6 + 0.4 * rnd()) * sz.y, off0 = (0.02 + 0.015 * rnd()) * sz.y, pts = [];
+    const K = 12;
+    for (let k = 0; k <= K; k++) {
+      const f = k / K, y = p0.y - len * f;
+      const ang = ang0 + Math.sign(ang0) * 0.05 * f;            // чуть расходятся назад
+      const r = envR(ang, Math.max(y, lo.y)) + off0 * (1 + 1.5 * f) + 0.012 * sz.x * Math.sin(f * 9 + s);
+      pts.push(new THREE.Vector3(cx + Math.sin(ang) * r, y, cz + Math.cos(ang) * r));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const TS = 36, RS = 6, rad = (0.022 + 0.018 * rnd()) * sz.y;
+    const tg = new THREE.TubeGeometry(curve, TS, rad, RS, false), tp = tg.attributes.position;
+    for (let a = 0; a <= TS; a++) {
+      const f = a / TS, c = curve.getPointAt(f), k = (0.55 + 0.45 * sstep(0, 0.12, f)) * (1 - 0.88 * Math.pow(f, 1.6));
+      const radial = new THREE.Vector3(c.x - cx, 0, c.z - cz).normalize();
+      for (let b = 0; b <= RS; b++) {
+        const j = a * (RS + 1) + b; v.fromBufferAttribute(tp, j).sub(c).multiplyScalar(k);
+        v.addScaledVector(radial, -v.dot(radial) * 0.78);          // плоская лента вдоль черепа
+        v.add(c).applyMatrix4(Mi); tp.setXYZ(j, v.x, v.y, v.z);
+      }
+    }
+    tg.deleteAttribute("uv"); tg.computeVertexNormals(); strandGeos.push(tg);
+  }
+  const hairMat = new THREE.MeshPhysicalMaterial({ color: ILL.hair.color, roughness: 0.42, sheen: 0.8,
+    sheenColor: new THREE.Color(0x4a3e6e), sheenRoughness: 0.35, envMapIntensity: 0.6 });
+  const long = new THREE.Mesh(mergeGeos(strandGeos), hairMat); long.name = "longHair"; face.add(long);
+  if (window.hair) window.hair.material.sheenColor.set(0x3a3052);
+
+  // --- 4. рога: изогнутые сужающиеся трубки с кольцами
+  const horns = [];
+  for (const sgn of [-1, 1]) {
+    const hx = cx + sgn * 0.3 * sz.x;
+    let best = -1, bd = 1e9;                                       // точка скальпа над висками
+    for (let i = 0; i < n; i++) {
+      const d = Math.hypot(wp[i*3] - hx, (wp[i*3+1] - lo.y) / sz.y * sz.y - 0.86 * sz.y, wp[i*3+2] - (cz + 0.18 * sz.z));
+      if (d < bd) { bd = d; best = i; }
+    }
+    const b0 = new THREE.Vector3().fromArray(wp, best*3), H = sz.y;
+    const curve = new THREE.CatmullRomCurve3([
+      b0.clone().addScaledVector(new THREE.Vector3().fromArray(wn, best*3), -0.02 * H),
+      b0.clone().add(new THREE.Vector3(sgn * 0.06 * H, 0.10 * H, -0.02 * H)),
+      b0.clone().add(new THREE.Vector3(sgn * 0.16 * H, 0.19 * H, -0.13 * H)),
+      b0.clone().add(new THREE.Vector3(sgn * 0.24 * H, 0.21 * H, -0.29 * H)),
+      b0.clone().add(new THREE.Vector3(sgn * 0.27 * H, 0.15 * H, -0.42 * H)),
+      b0.clone().add(new THREE.Vector3(sgn * 0.25 * H, 0.07 * H, -0.48 * H)),
+    ]);
+    const TS = 64, RS = 14, r0 = 0.062 * H;
+    const hg = new THREE.TubeGeometry(curve, TS, r0, RS, false), hp = hg.attributes.position;
+    const col = [], c0 = new THREE.Color(ILL.hornColor[0]), c1 = new THREE.Color(ILL.hornColor[1]);
+    for (let a = 0; a <= TS; a++) {
+      const f = a / TS, c = curve.getPointAt(f);
+      const k = (1 - 0.94 * Math.pow(f, 0.9)) * (1 + 0.07 * Math.sin(f * 70) * (1 - f));   // сужение + кольца
+      for (let b = 0; b <= RS; b++) {
+        const j = a * (RS + 1) + b; v.fromBufferAttribute(hp, j).sub(c).multiplyScalar(k).add(c).applyMatrix4(Mi);
+        hp.setXYZ(j, v.x, v.y, v.z);
+        const cc = c0.clone().lerp(c1, Math.pow(f, 1.3)).multiplyScalar(0.85 + 0.25 * (Math.sin(f * 70) * 0.5 + 0.5));
+        col.push(cc.r, cc.g, cc.b);
+      }
+    }
+    hg.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); hg.computeVertexNormals();
+    const h = new THREE.Mesh(hg, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.48, clearcoat: 0.3, envMapIntensity: 0.6 }));
+    h.name = "horn"; face.add(h); horns.push(h);
+  }
+
+  // --- 5. свет и интерфейс под образ
+  rim.color.set(0x58ff8a); rim.intensity = 1.6; fill.color.set(0xb894ff); key.color.set(0xf4e8ff);
+  document.body.style.background = "radial-gradient(ellipse at 50% 40%, #1a1428 0%, #050308 70%)";
+  document.body.style.color = "#9dff7a";
+  EMOX["нейтрально"] = expand({ "browDown*": 0.35, "mouthFrown*": 0.12, "noseSneer*": 0.12, "mouthPress*": 0.15 });
+  setEmotion("нейтрально");
+
+  // --- 6. анимация свечения: пульс, гаснет при моргании
+  window.illFrame = (ts, inf, dict) => {
+    const pulse = 0.9 + 0.1 * Math.sin(ts * 2.1) + 0.05 * Math.sin(ts * 7.3);
+    const bl = [inf[dict.eyeBlink_L] || 0, inf[dict.eyeBlink_R] || 0];
+    sprites.forEach((s, i) => { s.material.opacity = pulse * (1 - 0.85 * bl[i]); s.scale.setScalar(0.62 * sz.y / 3.3 * (0.95 + 0.08 * pulse)); });
+    lights.forEach((L, i) => L.intensity = 1.0 * pulse * (1 - 0.7 * bl[i]));
+    bandU.uGlow.value = pulse;
+  };
+  Object.assign(window, { band, long, horns, sprites, lights });
+}
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function mergeGeos(gs) {
+  let nv = 0, ni = 0; for (const g of gs) { nv += g.attributes.position.count; ni += g.index.count; }
+  const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), I = new Uint32Array(ni);
+  let ov = 0, oi = 0;
+  for (const g of gs) {
+    P.set(g.attributes.position.array, ov * 3); N.set(g.attributes.normal.array, ov * 3);
+    const ix = g.index.array; for (let k = 0; k < ix.length; k++) I[oi + k] = ix[k] + ov;
+    ov += g.attributes.position.count; oi += ix.length;
+  }
+  const m = new THREE.BufferGeometry();
+  m.setAttribute("position", new THREE.BufferAttribute(P, 3)); m.setAttribute("normal", new THREE.BufferAttribute(N, 3));
+  m.setIndex(new THREE.BufferAttribute(I, 1)); return m;
+}
+
+// ---------- мимика ----------
+// Эмоции — наборы ARKit-коэффициентов. Суффикс *: симметрично _L и _R.
+const EMO = {
+  "нейтрально":   { "mouthSmile*": 0.06, "browInnerUp": 0.04 },
+  "радость":      { "mouthSmile*": 0.72, "cheekSquint*": 0.55, "eyeSquint*": 0.38, "mouthDimple*": 0.3,
+                    "browOuterUp*": 0.18, "browInnerUp": 0.12, "mouthUpperUp*": 0.12, "cheekPuff": 0.05 },
+  "грусть":       { "browInnerUp": 0.85, "browDown*": 0.12, "mouthFrown*": 0.62, "eyeBlink*": 0.22,
+                    "mouthPress*": 0.22, "mouthShrugLower": 0.35, "eyeLookDown*": 0.22, "mouthRollLower": 0.1 },
+  "удивление":    { "browInnerUp": 0.9, "browOuterUp*": 0.85, "eyeWide*": 0.75, "jawOpen": 0.2,
+                    "mouthFunnel": 0.22, "mouthLowerDown*": 0.15 },
+  "задумчивость": { "browDown_L": 0.42, "browOuterUp_R": 0.38, "browInnerUp": 0.15, "eyeSquint*": 0.28,
+                    "mouthPress*": 0.32, "mouthLeft": 0.28, "mouthRollLower": 0.2, "eyeLookUp*": 0.3, "eyeLookOut_L": 0.15, "eyeLookIn_R": 0.15 },
+  "злость":       { "browDown*": 0.9, "noseSneer*": 0.5, "eyeSquint*": 0.5, "mouthFrown*": 0.42,
+                    "mouthPress*": 0.45, "jawForward": 0.12, "mouthUpperUp*": 0.15, "eyeWide*": 0.1 },
+  "смущение":     { "mouthSmile_L": 0.38, "mouthSmile_R": 0.16, "eyeLookDown*": 0.42, "browInnerUp": 0.45,
+                    "eyeSquint*": 0.25, "mouthPress*": 0.3, "cheekSquint_L": 0.2, "mouthRollLower": 0.15 },
+};
+function expand(o) {
+  const r = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (k.endsWith("*")) { r[k.slice(0, -1) + "_L"] = v; r[k.slice(0, -1) + "_R"] = v; } else r[k] = v;
+  }
+  return r;
+}
+const EMOX = Object.fromEntries(Object.entries(EMO).map(([k, v]) => [k, expand(v)]));
+const curW = {};            // сглаженные веса эмоции
+let emoT = EMOX["нейтрально"];
+let state = "idle";         // idle | listening | thinking | speaking
+let talk = 0, micLvl = 0;
+const vis = { open: 0, round: 0, wide: 0, close: 0 };  // артикуляция из спектра
+
+function setEmotion(e) {
+  if (!EMOX[e]) e = "нейтрально";
+  emoT = EMOX[e];
+  $("emo").textContent = e.toUpperCase();
+}
+function setState(s) {
+  state = s;
+  $("status").textContent = { idle: "ОЖИДАНИЕ", listening: "СЛУШАЮ", thinking: "ДУМАЮ", speaking: "ГОВОРЮ" }[s];
+}
+window.setEmotion = setEmotion; window.setState = setState;
+
+// плавный шум для микродвижений
+const noise = (t, f, s) => Math.sin(t * f + s) * 0.6 + Math.sin(t * f * 2.31 + s * 1.7) * 0.3 + Math.sin(t * f * 5.13 + s * 0.3) * 0.1;
+
+let blink = 0, nextBlink = 1500, blinkDouble = false;
+let gaze = { x: 0, y: 0 }, gazeT = { x: 0, y: 0 }, nextGaze = 0;
+let browPulse = 0, lastTalk = 0;
+const clock = new THREE.Clock();
+
+function frame() {
+  requestAnimationFrame(frame);
+  const t = performance.now(), ts = t / 1000;
+  const dt = Math.min(0.05, clock.getDelta());
+  if (!face) { renderer.render(scene, camera); return; }
+  const dict = face.morphTargetDictionary, inf = face.morphTargetInfluences;
+  const W = {};
+  const add = (k, v) => { W[k] = (W[k] || 0) + v; };
+
+  // 1. эмоция (сглаживание ~0.4 с)
+  const kE = 1 - Math.exp(-dt * 5);
+  for (const k in dict) {
+    const tg = emoT[k] || 0;
+    curW[k] = (curW[k] || 0) + (tg - (curW[k] || 0)) * kE;
+    if (curW[k] > 0.001) add(k, curW[k]);
+  }
+
+  // 2. моргание (иногда двойное, лёгкая асимметрия)
+  if (t > nextBlink) {
+    blink = 1; nextBlink = t + (blinkDouble ? 260 : 1800 + Math.random() * 4200);
+    blinkDouble = !blinkDouble && Math.random() < 0.18;
+  }
+  blink = Math.max(0, blink - dt * 7.5);
+  const bk = blink > 0 ? Math.sin(blink * Math.PI) : 0;
+  add("eyeBlink_L", bk); add("eyeBlink_R", bk * 0.96);
+
+  // 3. взгляд: саккады + микродрожь
+  if (t > nextGaze) {
+    if (state === "thinking") gazeT = { x: -0.55 + Math.random() * 0.2, y: 0.5 + Math.random() * 0.2 };
+    else if (state === "listening") gazeT = { x: (Math.random() - .5) * 0.12, y: (Math.random() - .5) * 0.08 };
+    else if (state === "speaking") gazeT = { x: (Math.random() - .5) * 0.35, y: (Math.random() - .5) * 0.2 };
+    else gazeT = { x: (Math.random() - .5) * 0.8, y: (Math.random() - .5) * 0.4 };
+    nextGaze = t + (state === "idle" ? 900 + Math.random() * 2600 : 500 + Math.random() * 1200);
+  }
+  const kG = 1 - Math.exp(-dt * 22);  // саккада — быстро
+  gaze.x += (gazeT.x - gaze.x) * kG; gaze.y += (gazeT.y - gaze.y) * kG;
+  const gx = gaze.x + noise(ts, 3.1, 1) * 0.015, gy = gaze.y + noise(ts, 2.7, 4) * 0.012;
+  if (gx > 0) { add("eyeLookOut_L", gx); add("eyeLookIn_R", gx); } else { add("eyeLookIn_L", -gx); add("eyeLookOut_R", -gx); }
+  if (gy > 0) { add("eyeLookUp_L", gy * 0.7); add("eyeLookUp_R", gy * 0.7); }
+  else { add("eyeLookDown_L", -gy); add("eyeLookDown_R", -gy); }
+  for (const e of [eyeL, eyeR]) if (e) { e.rotation.y = gx * 0.45; e.rotation.x = -gy * 0.35; }
+
+  // 4. речь: артикуляция из спектра + акцентные движения бровей
+  if (state === "speaking") {
+    const o = Math.min(1, vis.open);
+    add("jawOpen", o * 0.55);
+    add("mouthLowerDown_L", o * 0.35); add("mouthLowerDown_R", o * 0.35);
+    add("mouthUpperUp_L", o * 0.12); add("mouthUpperUp_R", o * 0.12);
+    add("mouthFunnel", vis.round * 0.5); add("mouthPucker", vis.round * 0.35);
+    add("mouthStretch_L", vis.wide * 0.3); add("mouthStretch_R", vis.wide * 0.3);
+    add("mouthSmile_L", vis.wide * 0.12); add("mouthSmile_R", vis.wide * 0.12);
+    add("mouthClose", vis.close * 0.2); add("mouthPress_L", vis.close * 0.3); add("mouthPress_R", vis.close * 0.3);
+    if (talk - lastTalk > 0.25 && browPulse < 0.2 && Math.random() < 0.5) browPulse = 1;
+  }
+  lastTalk = talk;
+  browPulse = Math.max(0, browPulse - dt * 2.5);
+  const bp = Math.sin(browPulse * Math.PI);
+  add("browInnerUp", bp * 0.35); add("browOuterUp_L", bp * 0.25); add("browOuterUp_R", bp * 0.2);
+
+  // 5. микромимика — живое лицо не бывает неподвижным
+  add("browInnerUp", Math.max(0, noise(ts, 0.35, 2)) * 0.06);
+  add("mouthSmile_L", Math.max(0, noise(ts, 0.22, 7)) * 0.04);
+  add("noseSneer_L", Math.max(0, noise(ts, 0.3, 9)) * 0.03);
+  add("cheekSquint_R", Math.max(0, noise(ts, 0.27, 5)) * 0.03);
+  if (state === "listening") { add("browInnerUp", 0.12 + micLvl * 1.5); add("eyeWide_L", 0.08); add("eyeWide_R", 0.08); }
+  if (state === "thinking") { add("mouthPress_L", 0.2); add("mouthRollLower", 0.1 + Math.max(0, noise(ts, 1.2, 3)) * 0.15); }
+  // дыхание — едва заметно приоткрытые губы
+  const br = (Math.sin(ts * 1.25) + 1) / 2;
+  if (state !== "speaking") add("jawOpen", br * 0.02);
+
+  for (const k in dict) inf[dict[k]] = Math.min(1, Math.max(0, W[k] || 0));
+  if (window.illFrame) illFrame(ts, inf, dict);
+
+  // 6. голова: дыхание, покачивание, кивки
+  const nod = state === "listening" ? Math.sin(ts * 2.6) * 0.035 * Math.min(1, micLvl * 6) : 0;
+  const spk = state === "speaking" ? talk : 0;
+  root.rotation.x = noise(ts, 0.4, 1) * 0.025 + nod + spk * noise(ts, 3.3, 2) * 0.03 + (state === "thinking" ? -0.06 : 0) + gy * 0.04;
+  root.rotation.y = noise(ts, 0.3, 3) * 0.05 + gx * 0.12 + spk * noise(ts, 2.1, 5) * 0.03 + (window.viewYaw || 0);
+  root.rotation.z = noise(ts, 0.25, 6) * 0.02 + (state === "thinking" ? 0.05 : 0) + (emoT === EMOX["смущение"] ? 0.06 : 0);
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(frame);
+
+// ---------- аудио ----------
+let actx, micStream, micAnalyser, rec, chunks = [], recording = false, silenceSince = 0, voiceSince = 0;
+let busy = false;
+const THR = 0.035, SILENCE_MS = 1300, MIN_VOICE_MS = 250;
+
+function rms(an) {
+  const a = new Float32Array(an.fftSize); an.getFloatTimeDomainData(a);
+  let s = 0; for (const v of a) s += v * v; return Math.sqrt(s / a.length);
+}
+
+async function start() {
+  $("start").remove();
+  actx = new AudioContext();
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+  const src = actx.createMediaStreamSource(micStream);
+  micAnalyser = actx.createAnalyser(); micAnalyser.fftSize = 1024; src.connect(micAnalyser);
+  setInterval(vadTick, 50);
+  say([{ emotion: "радость", text: "Я на связи. Теперь у меня настоящее лицо." }]);
+}
+$("start").onclick = start;
+window.startAvatar = start;
+if (location.search.includes("auto")) start().catch(e => console.error(e));
+
+function vadTick() {
+  micLvl = rms(micAnalyser);
+  if (busy) return;
+  const now = performance.now();
+  if (micLvl > THR) {
+    silenceSince = 0;
+    if (!recording) { if (!voiceSince) voiceSince = now; if (now - voiceSince > 120) beginRec(); }
+  } else {
+    voiceSince = 0;
+    if (recording) { if (!silenceSince) silenceSince = now; if (now - silenceSince > SILENCE_MS) endRec(); }
+  }
+}
+function beginRec() {
+  recording = true; chunks = []; silenceSince = 0;
+  rec = new MediaRecorder(micStream, { mimeType: "audio/webm;codecs=opus" });
+  rec.ondataavailable = e => chunks.push(e.data);
+  rec.onstop = onRecorded;
+  rec.startedAt = performance.now();
+  rec.start();
+  setState("listening"); setEmotion("нейтрально");
+}
+function endRec() { recording = false; rec.stop(); }
+
+async function onRecorded() {
+  if (performance.now() - rec.startedAt < SILENCE_MS + MIN_VOICE_MS) { setState("idle"); return; }
+  busy = true; setState("thinking"); setEmotion("задумчивость");
+  try {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const { text } = await (await fetch("/stt", { method: "POST", body: blob })).json();
+    if (!text || text.length < 2) { busy = false; setState("idle"); setEmotion("нейтрально"); return; }
+    $("you").textContent = "ты: " + text;
+    const { parts } = await (await fetch("/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })).json();
+    await say(parts);
+  } catch (e) {
+    console.error(e); await say([{ emotion: "смущение", text: "Связь со мной оборвалась." }]);
+  }
+}
+
+// ---------- Ф5.3: стриминг /tts_stream по предложениям (multipart/x-mixed-replace) ----------
+let _ttsAbort = null;
+let _bargeStopped = false;
+
+function _idxBytes(buf, needle, start) {
+  outer: for (let i = start; i <= buf.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) if (buf[i + j] !== needle[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+const _BOUNDARY = new TextEncoder().encode("--avatarwav");
+
+function _tryExtractPart(buf) {
+  const bStart = _idxBytes(buf, _BOUNDARY, 0);
+  if (bStart === -1) return null;
+  if (buf[bStart + 11] === 45 && buf[bStart + 12] === 45) return { final: true, consumed: bStart + 13 };
+  const hdrStart = bStart + 11 + 2;
+  const hdrEnd = _idxBytes(buf, new TextEncoder().encode("\r\n\r\n"), hdrStart);
+  if (hdrEnd === -1) return null;
+  const headerText = new TextDecoder().decode(buf.slice(hdrStart, hdrEnd));
+  const m = headerText.match(/Content-Length:\s*(\d+)/i);
+  if (!m) return null;
+  const len = parseInt(m[1], 10);
+  const bodyStart = hdrEnd + 4;
+  const bodyEnd = bodyStart + len;
+  if (buf.length < bodyEnd + 2) return null;
+  return { body: buf.slice(bodyStart, bodyEnd), consumed: bodyEnd + 2 };
+}
+
+function _concatBytes(a, b) {
+  const out = new Uint8Array(a.length + b.length); out.set(a, 0); out.set(b, a.length); return out;
+}
+
+async function streamAndPlay(text) {
+  _ttsAbort = new AbortController();
+  const resp = await fetch("/tts_stream", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }), signal: _ttsAbort.signal });
+  const reader = resp.body.getReader();
+  let buf = new Uint8Array(0);
+  while (true) {
+    if (_bargeStopped) { try { reader.cancel(); } catch {} return; }
+    const { done, value } = await reader.read();
+    if (value) buf = _concatBytes(buf, value);
+    let part;
+    while ((part = _tryExtractPart(buf))) {
+      buf = buf.slice(part.consumed);
+      if (part.final) return;
+      if (_bargeStopped) { try { reader.cancel(); } catch {} return; }
+      if (part.body.length) {
+        const abuf = await actx.decodeAudioData(part.body.buffer.slice(part.body.byteOffset, part.body.byteOffset + part.body.byteLength));
+        if (_bargeStopped) return;
+        setState("speaking");
+        await playBuf(abuf);
+      }
+    }
+    if (done) break;
+  }
+}
+
+function stopSpeaking() {
+  _bargeStopped = true;
+  if (_ttsAbort) { try { _ttsAbort.abort(); } catch {} }
+  if (window._curSrc) { try { window._curSrc.stop(); } catch {} window._curSrc = null; }
+  talk = 0; setState("idle"); busy = false;
+}
+
+(function connectBargeIn() {
+  try {
+    const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/barge_in_ws");
+    ws.onmessage = ev => { try { const m = JSON.parse(ev.data);
+      if (m.event === "speech_start" && busy) stopSpeaking(); } catch {} };
+    ws.onclose = () => setTimeout(connectBargeIn, 3000);
+    ws.onerror = () => {};
+  } catch (e) { console.error("barge-in ws", e); }
+})();
+
+async function say(parts) {
+  busy = true; _bargeStopped = false;
+  $("sub").textContent = "";
+  for (let i = 0; i < parts.length; i++) {
+    if (_bargeStopped) break;
+    setEmotion(parts[i].emotion);
+    $("sub").textContent += (i ? " " : "") + parts[i].text;
+    try { await streamAndPlay(parts[i].text); } catch (e) { if (e.name !== "AbortError") console.error(e); }
+    if (_bargeStopped) break;
+  }
+  talk = 0; setState("idle");
+  setTimeout(() => { if (!busy) setEmotion("нейтрально"); }, 3000);
+  busy = false;
+}
+window.say = say;
+
+// Артикуляция: громкость -> раскрытие челюсти; спектральный центроид -> округлые (о/у) или широкие (и/с/ш) губы.
+function playBuf(buf) {
+  return new Promise(res => {
+    const src = actx.createBufferSource(); src.buffer = buf; window._curSrc = src;
+    const an = actx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.3;
+    src.connect(an); an.connect(actx.destination);
+    const fr = new Uint8Array(an.frequencyBinCount), hz = actx.sampleRate / an.fftSize;
+    const iv = setInterval(() => {
+      const v = Math.min(1, rms(an) * 5.5);
+      talk += (v - talk) * 0.6;
+      an.getByteFrequencyData(fr);
+      let lo = 0, mid = 0, hi = 0, num = 0, den = 0;
+      for (let i = 1; i < fr.length; i++) {
+        const f = i * hz, m = fr[i];
+        if (f < 700) lo += m; else if (f < 2500) mid += m; else if (f < 8000) hi += m;
+        num += f * m; den += m;
+      }
+      const cen = den ? num / den : 0, tot = lo + mid + hi + 1;
+      const round = talk > 0.08 ? Math.max(0, Math.min(1, (lo / tot - 0.45) * 3)) : 0;
+      const wide = talk > 0.05 ? Math.max(0, Math.min(1, (hi / tot - 0.15) * 3 + (cen > 2500 ? 0.3 : 0))) : 0;
+      const k = 0.5;
+      vis.open += (talk * (1 - wide * 0.4) - vis.open) * k;
+      vis.round += (round - vis.round) * k;
+      vis.wide += (wide - vis.wide) * k;
+      vis.close += ((talk < 0.06 ? 1 : 0) - vis.close) * 0.4;
+    }, 25);
+    src.onended = () => { clearInterval(iv); talk = 0; vis.open = vis.round = vis.wide = 0; window._curSrc = null; res(); };
+    src.start();
+  });
+}
+
+addEventListener("keydown", e => {
+  if (e.code === "KeyR") fetch("/reset", { method: "POST" }).then(() => { $("sub").textContent = "Память диалога очищена."; });
+});
+</script>
+</body>
+</html>

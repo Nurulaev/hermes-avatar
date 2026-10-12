@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Гермес · Иллидан</title>
+<style>
+  :root { --fel: #7dff3a; --fel2: #b8ff8a; --ink: #1a0f26; --sw: 600px; }
+  html, body { margin: 0; height: 100%; overflow: hidden; color: #c9ffb0;
+    background: radial-gradient(ellipse at 50% 45%, #241a3a 0%, #0c0816 55%, #040208 100%);
+    font-family: "Nunito", "Comfortaa", "DejaVu Sans", sans-serif; }
+  #stage { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  #stage svg { width: 100%; height: 100%; overflow: visible; }
+  #status, #emo { position: absolute; top: 18px; font: 600 12px "JetBrains Mono", monospace; letter-spacing: .25em; opacity: .7; }
+  #status { left: 22px; } #emo { right: 22px; }
+  #sub { position: absolute; bottom: 4.5vh; left: 50%; transform: translateX(-50%); width: min(70vw, 900px); text-align: center;
+    font-size: clamp(16px, 1.6vw, 22px); line-height: 1.45; text-shadow: 0 2px 10px #000, 0 0 2px #000; z-index: 5; }
+  #you { position: absolute; bottom: 1.2vh; left: 0; right: 0; text-align: center; font-size: 13px; opacity: .4; }
+  #start { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 14vh;
+    box-sizing: border-box; background: rgba(5,3,10,.35); font-size: 18px; letter-spacing: .25em; cursor: pointer; z-index: 20; }
+
+  /* ---------- пространство мыслей ---------- */
+  #trails { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+  .dot { position: absolute; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #eaffd8, var(--fel) 60%, #2f8a10);
+    box-shadow: 0 0 12px var(--fel); opacity: 0; transform: scale(.2); transition: opacity .4s, transform .5s cubic-bezier(.3,1.6,.5,1); }
+  .dot.on { opacity: .85; transform: scale(1); }
+  .viz { position: absolute; z-index: 4; box-sizing: border-box; max-width: calc(50vw - var(--sw) / 2 - 3vw); min-width: 160px;
+    max-height: 30vh; overflow: hidden; padding: 14px 18px; border-radius: 22px;
+    background: linear-gradient(160deg, rgba(40,26,64,.88), rgba(14,9,24,.9));
+    border: 2px solid rgba(125,255,58,.55); box-shadow: 0 0 24px rgba(125,255,58,.18), inset 0 0 30px rgba(125,255,58,.06);
+    opacity: 0; transform: translateY(-50%) scale(.6); transition: opacity .45s, transform .55s cubic-bezier(.3,1.5,.5,1); }
+  .viz.on { opacity: 1; transform: translateY(-50%) scale(1); }
+  .viz.off { opacity: 0; transform: translateY(-50%) scale(.8); }
+  .viz .ttl { font: 700 11px "JetBrains Mono", monospace; letter-spacing: .2em; opacity: .55; margin-bottom: 8px; text-transform: uppercase; }
+  .pop { opacity: 0; transform: translateY(8px) scale(.8); animation: pop .5s cubic-bezier(.3,1.6,.5,1) forwards; }
+  @keyframes pop { to { opacity: 1; transform: none; } }
+  .v-thought { font-size: clamp(16px, 1.5vw, 22px); font-style: italic; line-height: 1.35; color: #e6ffd6; }
+  .v-icons { display: flex; flex-wrap: wrap; gap: 14px 18px; justify-content: center; }
+  .v-icons .it { display: flex; flex-direction: column; align-items: center; max-width: 110px; text-align: center; }
+  .v-icons .em { font-size: clamp(34px, 3.4vw, 56px); line-height: 1.1; filter: drop-shadow(0 4px 8px rgba(0,0,0,.5)); animation: bob 3s ease-in-out infinite; }
+  .v-icons .cap { font-size: 13px; opacity: .85; margin-top: 4px; }
+  @keyframes bob { 50% { transform: translateY(-5px) rotate(-3deg); } }
+  .v-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .v-flow .nd { padding: 7px 12px; border-radius: 14px; background: rgba(125,255,58,.12); border: 1.5px solid rgba(125,255,58,.6); font-size: 15px; }
+  .v-flow .ar { color: var(--fel); font-size: 20px; }
+  .v-list { margin: 0; padding: 0; list-style: none; font-size: 16px; line-height: 1.5; }
+  .v-list li::before { content: "◆"; color: var(--fel); margin-right: 9px; font-size: 11px; vertical-align: 2px; }
+  .v-num .n { font: 800 clamp(30px, 3.6vw, 58px) "Nunito", sans-serif; color: var(--fel2); text-shadow: 0 0 18px rgba(125,255,58,.5); line-height: 1.05; }
+  .v-num .c { font-size: 15px; opacity: .85; margin-top: 4px; }
+  .v-bars .row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 14px; margin: 5px 0; }
+  .v-bars .bar { height: 14px; border-radius: 7px; background: linear-gradient(90deg, #3fae14, var(--fel)); box-shadow: 0 0 10px rgba(125,255,58,.35);
+    width: 0; transition: width 1s cubic-bezier(.2,.9,.3,1); }
+  .v-code { margin: 0; font: 13px/1.45 "JetBrains Mono", monospace; color: #d6ffc2; white-space: pre-wrap; }
+  .v-svg svg { width: 100%; height: auto; max-height: 24vh; display: block; }
+</style>
+</head>
+<body>
+<div id="stage">
+<svg viewBox="-225 -255 450 545" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="gSkin" cx="45%" cy="38%" r="70%"><stop offset="0" stop-color="#c39ae6"/><stop offset=".6" stop-color="#9468c4"/><stop offset="1" stop-color="#6c4699"/></radialGradient>
+    <linearGradient id="gBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a5fbb"/><stop offset="1" stop-color="#5a3a86"/></linearGradient>
+    <linearGradient id="gHorn" x1="1" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#3b2416"/><stop offset=".55" stop-color="#7a5636"/><stop offset="1" stop-color="#d2b48a"/></linearGradient>
+    <linearGradient id="gHair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2140"/><stop offset="1" stop-color="#0e0a16"/></linearGradient>
+    <radialGradient id="gFelLight" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="#7dff3a" stop-opacity=".55"/><stop offset="1" stop-color="#7dff3a" stop-opacity="0"/></radialGradient>
+    <filter id="fGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="fHaze" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="12"/></filter>
+
+    <path id="headPath" d="M0,-178 C72,-178 108,-132 108,-62 C108,-2 98,44 72,86 L26,126 Q0,137 -26,126 L-72,86 C-98,44 -108,-2 -108,-62 C-108,-132 -72,-178 0,-178 Z"/>
+    <clipPath id="cHead"><use href="#headPath"/></clipPath>
+    <path id="hornPath" d="M-52.8,-173.5 L-57.4,-174.7 L-62.0,-175.9 L-66.6,-177.1 L-71.3,-178.2 L-75.9,-179.3 L-80.5,-180.4 L-85.1,-181.5 L-89.7,-182.6 L-94.2,-183.7 L-98.7,-184.9 L-103.2,-186.0 L-107.6,-187.1 L-112.0,-188.3 L-116.3,-189.4 L-120.6,-190.6 L-124.8,-191.9 L-128.9,-193.2 L-133.0,-194.5 L-136.9,-195.8 L-140.8,-197.3 L-144.6,-198.7 L-148.3,-200.2 L-151.9,-201.8 L-155.3,-203.5 L-158.7,-205.2 L-162.0,-207.0 L-165.1,-208.9 L-168.1,-210.9 L-171.1,-213.0 L-173.9,-215.2 L-176.5,-217.5 L-179.1,-219.9 L-181.5,-222.5 L-183.8,-225.3 L-186.0,-228.3 L-188.0,-231.4 L-189.9,-234.7 L-191.6,-238.3 L-193.2,-242.1 L-194.8,-246.1 L-197.2,-245.9 L-197.6,-241.4 L-197.6,-236.9 L-197.3,-232.5 L-196.6,-228.2 L-195.7,-224.0 L-194.4,-219.8 L-192.9,-215.8 L-191.2,-211.8 L-189.2,-207.9 L-187.0,-204.1 L-184.5,-200.4 L-181.8,-196.8 L-179.0,-193.3 L-175.9,-189.9 L-172.7,-186.7 L-169.4,-183.5 L-165.9,-180.4 L-162.3,-177.4 L-158.5,-174.6 L-154.7,-171.7 L-150.7,-169.0 L-146.7,-166.4 L-142.6,-163.8 L-138.5,-161.3 L-134.3,-158.9 L-130.0,-156.5 L-125.7,-154.1 L-121.4,-151.8 L-117.1,-149.6 L-112.7,-147.4 L-108.4,-145.2 L-104.1,-143.1 L-99.8,-141.0 L-95.5,-138.9 L-91.3,-136.8 L-87.1,-134.7 L-83.0,-132.7 L-79.0,-130.6 L-75.1,-128.6 L-71.2,-126.5 Z"/>
+    <clipPath id="cHorn"><use href="#hornPath"/></clipPath>
+    <g id="horn">
+      <use href="#hornPath" fill="url(#gHorn)"/>
+      <path d="M-57.2,-175.2 Q-74.3,-154.7 -75.2,-128.1 M-71.1,-178.6 Q-86.8,-159.2 -87.3,-134.3 M-84.9,-182.0 Q-99.5,-163.8 -99.9,-140.6 M-98.6,-185.2 Q-112.3,-168.6 -112.9,-147.0 M-111.9,-188.6 Q-124.8,-173.6 -125.8,-153.8 M-124.7,-192.2 Q-137.0,-179.0 -138.6,-161.0 M-136.8,-196.1 Q-148.5,-184.8 -150.9,-168.8 M-148.1,-200.5 Q-159.3,-191.3 -162.4,-177.2 M-158.6,-205.4 Q-169.0,-198.4 -172.9,-186.5 M-168.0,-211.0 Q-177.5,-206.2 -182.0,-196.7 M-176.4,-217.6 Q-184.5,-214.9 -189.3,-207.8 M-183.7,-225.4 Q-190.1,-224.4 -194.5,-219.8" fill="none" stroke="#2a170c" stroke-width="3" opacity=".6" clip-path="url(#cHorn)"/>
+      <path d="M-67.1,-162.3 L-71.6,-163.7 L-76.0,-165.2 L-80.5,-166.6 L-85.0,-168.0 L-89.5,-169.4 L-94.0,-170.8 L-98.5,-172.2 L-102.9,-173.6 L-107.4,-175.1 L-111.8,-176.5 L-116.1,-178.0 L-120.4,-179.5 L-124.7,-181.1 L-128.9,-182.7 L-133.0,-184.4 L-137.1,-186.0 L-141.1,-187.8 L-145.0,-189.6 L-148.8,-191.5 L-152.5,-193.4 L-156.1,-195.4 L-159.6,-197.5 L-162.9,-199.6 L-166.2,-201.9 L-169.3,-204.2 L-172.3,-206.7 L-175.1,-209.2 L-177.8,-211.8 L-180.3,-214.6 L-182.7,-217.5 L-184.9,-220.5 L-187.0,-223.7 L-188.9,-227.0" fill="none" stroke="#f6e2bf" stroke-width="3.5" opacity=".45" stroke-linecap="round"/>
+      <use href="#hornPath" fill="none" stroke="var(--ink)" stroke-width="4.5" stroke-linejoin="round"/>
+    </g>
+    <g id="ear">
+      <path d="M-98,-42 C-140,-72 -186,-122 -214,-176 C-204,-122 -174,-62 -138,-20 C-122,-4 -110,10 -98,22 Z" fill="url(#gSkin)" stroke="var(--ink)" stroke-width="4.5" stroke-linejoin="round"/>
+      <path d="M-108,-26 C-140,-54 -170,-98 -194,-146" fill="none" stroke="#5b3a85" stroke-width="5" stroke-linecap="round" opacity=".8"/>
+    </g>
+    <g id="lockBack">
+      <path d="M-108,-132 C-152,-62 -168,60 -172,232 L-152,212 L-142,246 L-122,204 C-118,84 -108,-18 -84,-92 Z" fill="url(#gHair)" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+    </g>
+    <g id="lockSide">
+      <path d="M-100,-118 C-128,-36 -126,92 -112,254 L-98,230 L-86,262 L-80,222 C-86,120 -92,20 -78,-70 Z" fill="url(#gHair)" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M-98,-70 C-110,0 -108,100 -100,200" fill="none" stroke="#4a3d70" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+    </g>
+    <g id="brow"><path d="M-92,-70 L-22,-86 L-12,-74 L-90,-58 Z" fill="#2b1840" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/></g>
+    <g id="eye">
+      <ellipse cx="-43" cy="-32" rx="34" ry="16" fill="#7dff3a" opacity=".55" filter="url(#fHaze)" class="haze"/>
+      <path d="M-70,-36 Q-44,-48 -16,-28 Q-44,-20 -70,-36 Z" fill="#c8ff9e" filter="url(#fGlow)"/>
+      <path d="M-58,-34 Q-44,-40 -28,-30 Q-44,-27 -58,-34 Z" fill="#f4ffe8"/>
+    </g>
+    <g id="tattoo">
+      <path d="M-158,236 C-140,204 -104,214 -108,238 C-112,258 -142,254 -132,236" />
+      <path d="M-182,272 C-160,242 -96,240 -72,274"/>
+      <path d="M-70,196 C-84,214 -104,214 -112,198"/>
+    </g>
+  </defs>
+
+  <!-- волосы сзади -->
+  <g id="hairBack">
+    <path d="M-114,-118 C-128,-192 -52,-218 0,-215 C52,-218 128,-192 114,-118 L134,40 L-134,40 Z" fill="url(#gHair)" stroke="var(--ink)" stroke-width="4"/>
+    <use href="#lockBack"/><use href="#lockBack" transform="scale(-1,1)"/>
+  </g>
+  <!-- шея, плечи, фел-татуировки -->
+  <g id="body">
+    <path d="M-44,92 L-50,172 L50,172 L44,92 Z" fill="#6a4596" stroke="var(--ink)" stroke-width="4"/>
+    <path d="M-220,292 C-210,214 -124,182 -48,160 L48,160 C124,182 210,214 220,292 Z" fill="url(#gBody)" stroke="var(--ink)" stroke-width="4.5" stroke-linejoin="round"/>
+    <path d="M-38,186 Q-90,196 -132,208 M38,186 Q90,196 132,208" fill="none" stroke="#4b2e72" stroke-width="3" stroke-linecap="round"/>
+    <g id="tats" fill="none" stroke="#7dff3a" stroke-width="4.5" stroke-linecap="round" filter="url(#fGlow)">
+      <use href="#tattoo"/><use href="#tattoo" transform="scale(-1,1)"/>
+    </g>
+  </g>
+  <g id="embers"></g>
+
+  <g id="headG">
+    <g id="hairSide"><use href="#lockSide"/><use href="#lockSide" transform="scale(-1,1)"/></g>
+    <g id="earL"><use href="#ear"/></g>
+    <g transform="scale(-1,1)"><g id="earR"><use href="#ear"/></g></g>
+
+    <use href="#headPath" fill="url(#gSkin)"/>
+    <g clip-path="url(#cHead)">
+      <path d="M32,-178 C92,-162 112,-100 108,-40 C102,22 90,62 72,86 L26,126 C62,60 78,0 62,-82 Z" fill="#4e2f7a" opacity=".42"/>
+      <ellipse cx="-42" cy="-112" rx="34" ry="18" fill="#efdcff" opacity=".22"/>
+      <ellipse cx="-58" cy="18" rx="20" ry="12" fill="#efdcff" opacity=".15"/>
+      <ellipse id="felLight" cx="0" cy="-20" rx="120" ry="70" fill="url(#gFelLight)" style="mix-blend-mode:screen"/>
+    </g>
+    <use href="#headPath" fill="none" stroke="var(--ink)" stroke-width="5" stroke-linejoin="round"/>
+
+    <!-- складки и нос -->
+    <g fill="none" stroke="#4a2c70" stroke-linecap="round">
+      <path d="M-64,8 C-56,34 -44,54 -30,64 M64,8 C56,34 44,54 30,64" stroke-width="3" opacity=".75"/>
+      <path d="M-10,112 Q0,118 10,112" stroke-width="3" opacity=".7"/>
+      <path d="M-4,-14 C-6,10 -14,28 -17,40 Q-7,50 0,45 Q7,50 17,40" stroke-width="3.5"/>
+      <path d="M-74,-6 L-92,4 M74,-6 L92,4" stroke-width="2.5" opacity=".6"/>
+    </g>
+
+    <!-- рот -->
+    <g id="mouthG" transform="translate(0,80)">
+      <clipPath id="cMouth"><path id="mClip"/></clipPath>
+      <path id="mIn" fill="#2a0e1c"/>
+      <ellipse id="tongue" cx="0" cy="22" rx="16" ry="9" fill="#a8345a" clip-path="url(#cMouth)"/>
+      <path id="fangL" fill="#fffbee" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round"/>
+      <path id="fangR" fill="#fffbee" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round"/>
+      <path id="lipU" fill="none" stroke="#2e1846" stroke-width="3.5" stroke-linecap="round"/>
+      <path id="lipD" fill="none" stroke="#5a3680" stroke-width="2.5" stroke-linecap="round" opacity=".8"/>
+    </g>
+
+    <!-- повязка -->
+    <g id="tails" fill="#140e1c" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round">
+      <path d="M104,-46 C140,-54 176,-44 212,-22 L194,-14 L206,2 C170,-14 136,-22 104,-20 Z"/>
+      <path d="M104,-30 C134,-28 160,-16 186,8 L168,10 L176,26 C150,6 128,-6 104,-14 Z"/>
+    </g>
+    <path d="M-112,-52 C-50,-64 50,-64 112,-52 L110,-12 C50,-24 -50,-24 -110,-12 Z" fill="#140e1c" stroke="var(--ink)" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M-104,-46 C-50,-57 50,-57 104,-46" fill="none" stroke="#3d3054" stroke-width="2.5" opacity=".8"/>
+    <g id="eyeL"><use href="#eye"/></g>
+    <g transform="scale(-1,1)"><g id="eyeR"><use href="#eye"/></g></g>
+    <g id="browL"><use href="#brow"/></g>
+    <g transform="scale(-1,1)"><g id="browR"><use href="#brow"/></g></g>
+
+    <!-- шапка волос и рога -->
+    <path d="M-110,-72 C-120,-168 -56,-208 0,-203 C56,-208 120,-168 110,-72 C98,-118 72,-142 32,-150 L0,-128 L-32,-150 C-72,-142 -98,-118 -110,-72 Z" fill="url(#gHair)" stroke="var(--ink)" stroke-width="4.5" stroke-linejoin="round"/>
+    <path d="M-60,-176 C-80,-160 -96,-130 -100,-100 M60,-176 C80,-160 96,-130 100,-100 M-20,-198 C-30,-180 -32,-162 -30,-150" fill="none" stroke="#4a3d70" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+    <g id="hornL"><use href="#horn"/></g>
+    <g transform="scale(-1,1)"><g id="hornR"><use href="#horn"/></g></g>
+    <g id="think" opacity="0">
+      <circle cx="104" cy="-176" r="6" fill="#c8ff9e" filter="url(#fGlow)"/>
+      <circle cx="126" cy="-202" r="9" fill="#c8ff9e" filter="url(#fGlow)"/>
+      <circle cx="156" cy="-226" r="13" fill="#c8ff9e" filter="url(#fGlow)"/>
+    </g>
+  </g>
+</svg>
+</div>
+<div id="trails"></div>
+<div id="status">ОЖИДАНИЕ</div>
+<div id="emo">НЕЙТРАЛЬНО</div>
+<div id="sub"></div>
+<div id="you"></div>
+<div id="start">НАЖМИ, ЧТОБЫ РАЗБУДИТЬ ГЕРМЕСА</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const SVG = document.querySelector("#stage svg");
+
+// ---------- раскладка: голова в центре, по бокам — поле мыслей ----------
+function layout() {
+  const H = Math.min(innerHeight * 0.9, innerWidth * 0.40 * 545 / 450);
+  const W = H * 450 / 545;
+  $("stage").style.width = W + "px"; $("stage").style.height = H + "px";
+  document.documentElement.style.setProperty("--sw", W + "px");
+  vizSlots.forEach(s => s.el && placeCard(s));
+}
+addEventListener("resize", layout);
+
+// ---------- эмоции: параметры мультяшного лица ----------
+const EMO = {
+  "нейтрально":   { brow: 0,    tilt: .45, smile: -.12, mw: 1,    eye: 1,   glow: 1,   snarl: .15, open: 0 },
+  "радость":      { brow: .35,  tilt: 0,   smile: .9,   mw: 1.15, eye: .7,  glow: 1.25, snarl: .3, open: .12 },
+  "грусть":       { brow: .25,  tilt: -.9, smile: -.7,  mw: .85,  eye: .75, glow: .55, snarl: 0,  open: 0 },
+  "удивление":    { brow: 1,    tilt: -.25, smile: 0,   mw: .65,  eye: 1.45, glow: 1.6, snarl: 0, open: .45 },
+  "задумчивость": { brow: .2,   tilt: .3,  smile: -.15, mw: .8,   eye: .8,  glow: .8,  snarl: 0,  open: 0, asym: .5 },
+  "злость":       { brow: -.55, tilt: 1.3, smile: -.45, mw: 1.15, eye: .65, glow: 1.7, snarl: .9, open: .1 },
+  "смущение":     { brow: .3,   tilt: -.45, smile: .35, mw: .8,   eye: .65, glow: .7,  snarl: 0,  open: 0 },
+};
+let emoT = EMO["нейтрально"], emoName = "нейтрально";
+const cur = { ...emoT, asym: 0 };
+let state = "idle", talk = 0, micLvl = 0;
+const vis = { open: 0, round: 0, wide: 0, close: 0 };
+function setEmotion(e) { if (!EMO[e]) e = "нейтрально"; emoT = EMO[e]; emoName = e; $("emo").textContent = e.toUpperCase(); }
+function setState(s) { state = s; $("status").textContent = { idle: "ОЖИДАНИЕ", listening: "СЛУШАЮ", thinking: "ДУМАЮ", speaking: "ГОВОРЮ" }[s]; }
+window.setEmotion = setEmotion; window.setState = setState;
+
+// ---------- анимация ----------
+const noise = (t, f, s) => Math.sin(t * f + s) * .6 + Math.sin(t * f * 2.31 + s * 1.7) * .3 + Math.sin(t * f * 5.13 + s * .3) * .1;
+const el = id => document.getElementById(id);
+const E = Object.fromEntries(["headG","hairBack","hairSide","earL","earR","eyeL","eyeR","browL","browR","tails","felLight","think","tats",
+  "mClip","mIn","fangL","fangR","lipU","lipD","tongue","hornL","hornR"].map(k => [k, el(k)]));
+let blink = 0, nextBlink = 1200, dbl = false, gaze = 0, gazeT = 0, nextGaze = 0, last = performance.now();
+
+// угли Скверны
+const embers = [];
+for (let i = 0; i < 26; i++) {
+  const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  c.setAttribute("fill", "#9dff60"); c.setAttribute("filter", "url(#fGlow)"); el("embers").appendChild(c);
+  embers.push({ c, x: 0, y: 400, v: 0, r: 0, ph: Math.random() * 6 });
+}
+function respawn(m) { m.x = (Math.random() - .5) * 420; m.y = 200 + Math.random() * 100; m.v = 12 + Math.random() * 26; m.r = 1 + Math.random() * 2.4; m.life = 0; }
+embers.forEach(m => { respawn(m); m.y -= Math.random() * 400; });
+
+function mouth(o, s, w, snarl) {
+  const cy = -s * 12, uy = -3 - snarl * 7 - s * 3, ly = 3 + o * 58 + Math.max(0, s) * 7 * (o > .05 ? 1 : .3);
+  const d = `M${-w},${cy} Q0,${uy * 2 - cy} ${w},${cy} Q0,${ly * 2 - cy} ${-w},${cy} Z`;
+  E.mClip.setAttribute("d", d); E.mIn.setAttribute("d", d);
+  E.lipU.setAttribute("d", `M${-w - 3},${cy + 1} Q0,${uy * 2 - cy} ${w + 3},${cy + 1}`);
+  E.lipD.setAttribute("d", `M${-w * .55},${ly + 3} Q0,${ly + 8} ${w * .55},${ly + 3}`);
+  E.lipD.style.opacity = o > .05 || s < 0 ? .8 : .35;
+  const uyAt = x => { const t = (x + w) / (2 * w); return (1 - t) ** 2 * cy + 2 * t * (1 - t) * (uy * 2 - cy) + t * t * cy; };
+  for (const [sgn, f] of [[-1, E.fangL], [1, E.fangR]]) {
+    const x = sgn * w * .42, y0 = uyAt(x) - 1, L = 9 + snarl * 6 + o * 6, hw = 5 + snarl * 1.5;
+    f.setAttribute("d", `M${x - hw},${y0} L${x + sgn * 1.5},${y0 + L} L${x + hw},${y0} Z`);
+  }
+  E.tongue.style.opacity = o > .15 ? 1 : 0; E.tongue.setAttribute("cy", 8 + o * 45);
+}
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.05, (now - last) / 1000); last = now; const ts = now / 1000;
+  const k = 1 - Math.exp(-dt * 6);
+  for (const key in cur) cur[key] += ((emoT[key] || 0) - cur[key]) * k;
+
+  // моргание
+  if (now > nextBlink) { blink = 1; nextBlink = now + (dbl ? 240 : 1800 + Math.random() * 4000); dbl = !dbl && Math.random() < .2; }
+  blink = Math.max(0, blink - dt * 7.5);
+  const bk = blink > 0 ? Math.sin(blink * Math.PI) : 0;
+
+  // взгляд
+  if (now > nextGaze) {
+    gazeT = state === "thinking" ? -.8 : state === "idle" ? (Math.random() - .5) * 1.6 : (Math.random() - .5) * .5;
+    nextGaze = now + 700 + Math.random() * 2400;
+  }
+  gaze += (gazeT - gaze) * (1 - Math.exp(-dt * 18));
+
+  // глаза: свечение, моргание, прищур
+  const pulse = .9 + .1 * Math.sin(ts * 2.2) + .05 * Math.sin(ts * 7.1);
+  const lis = state === "listening" ? .3 + micLvl * 4 : 0;
+  const thk = state === "thinking" ? .25 * Math.sin(ts * 6) : 0;
+  const glow = Math.max(.2, cur.glow * pulse + lis + thk);
+  const sy = Math.max(.06, cur.eye * (1 - bk * .95));
+  for (const [g, sgn] of [[E.eyeL, 1], [E.eyeR, -1]]) {
+    g.setAttribute("transform", `translate(${gaze * 5 * sgn},0) translate(-43,-32) scale(1,${sy.toFixed(3)}) translate(43,32)`);
+    g.style.opacity = Math.min(1, .55 + glow * .4);
+  }
+  document.querySelectorAll("#eye .haze").forEach(h => h.setAttribute("opacity", (.3 + glow * .35).toFixed(2)));
+  E.felLight.style.opacity = Math.min(1, glow * .7);
+  E.tats.style.opacity = .55 + .35 * Math.sin(ts * 1.6) * .5 + glow * .2;
+
+  // брови
+  const bp = state === "speaking" ? Math.max(0, talk - .3) * .5 : 0;
+  const by = -(cur.brow + bp + (state === "listening" ? .15 : 0)) * 12;
+  E.browL.setAttribute("transform", `translate(0,${by + cur.asym * 6}) rotate(${(cur.tilt * 11 + cur.asym * 6).toFixed(2)},-50,-72)`);
+  E.browR.setAttribute("transform", `translate(0,${by - cur.asym * 8}) rotate(${(cur.tilt * 11 - cur.asym * 8).toFixed(2)},-50,-72)`);
+
+  // рот
+  const br = (Math.sin(ts * 1.3) + 1) / 2;
+  const o = state === "speaking" ? Math.min(1, vis.open * .95) + cur.open * .3 : cur.open + br * .015;
+  const w = 40 * cur.mw * (1 - vis.round * .38 + vis.wide * .18);
+  mouth(o, cur.smile, w, cur.snarl);
+
+  // голова, волосы, уши, повязка
+  const nod = state === "listening" ? Math.sin(ts * 2.6) * 3 * Math.min(1, micLvl * 6) : 0;
+  const spk = state === "speaking" ? talk : 0;
+  const rx = noise(ts, .35, 3) * 2.2 + gaze * 1.5 + spk * noise(ts, 2.2, 5) * 2 + (state === "thinking" ? 4 : 0) + (emoName === "смущение" ? 4 : 0);
+  const ty = br * 2.5 + nod + spk * noise(ts, 3.1, 2) * 2.5;
+  const tx = noise(ts, .28, 1) * 3;
+  E.headG.setAttribute("transform", `translate(${tx.toFixed(2)},${ty.toFixed(2)}) rotate(${rx.toFixed(2)},0,60)`);
+  E.hairBack.setAttribute("transform", `translate(${(tx * .8).toFixed(2)},${(ty * .7).toFixed(2)}) rotate(${(rx * .6 + noise(ts, .5, 8)).toFixed(2)},0,-150)`);
+  E.hairSide.setAttribute("transform", `rotate(${(noise(ts, .6, 4) * 1.2 - rx * .3).toFixed(2)},0,-120)`);
+  const earA = (state === "listening" ? -7 : 0) + (emoName === "грусть" ? 9 : 0) + (emoName === "удивление" ? -6 : 0) + noise(ts, .9, 2) * 1.5;
+  E.earL.setAttribute("transform", `rotate(${earA.toFixed(2)},-100,-10)`);
+  E.earR.setAttribute("transform", `rotate(${(earA + noise(ts, .8, 7) * 1.2).toFixed(2)},-100,-10)`);
+  E.tails.setAttribute("transform", `rotate(${(noise(ts, 1.1, 3) * 7 - rx).toFixed(2)},104,-32)`);
+  E.think.style.opacity = state === "thinking" ? .6 + .4 * Math.sin(ts * 5) : 0;
+
+  // угли
+  for (const m of embers) {
+    m.y -= m.v * dt; m.x += Math.sin(ts * 1.3 + m.ph) * 10 * dt; m.life += dt;
+    if (m.y < -240) respawn(m);
+    m.c.setAttribute("cx", m.x.toFixed(1)); m.c.setAttribute("cy", m.y.toFixed(1)); m.c.setAttribute("r", m.r.toFixed(2));
+    m.c.setAttribute("opacity", (Math.min(1, m.life) * Math.max(0, Math.min(1, (m.y + 240) / 200)) * (.5 + .5 * Math.sin(ts * 4 + m.ph))).toFixed(2));
+  }
+}
+
+// ---------- пространство мыслей ----------
+// слоты: справа/слева × верх/середина/низ; карточки соединены с головой цепочкой «пузырьков мысли»
+const vizSlots = [
+  { side: "r", y: .2 }, { side: "l", y: .2 }, { side: "r", y: .5 }, { side: "l", y: .5 }, { side: "r", y: .8 }, { side: "l", y: .8 },
+].map(s => ({ ...s, el: null, dots: [], t: 0 }));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const splitItems = s => String(s || "").split(/\s*[;\n]\s*/).map(x => x.trim()).filter(Boolean);
+
+function sanitizeSvg(src) {
+  const doc = new DOMParser().parseFromString(src, "image/svg+xml");
+  const svg = doc.documentElement;
+  if (svg.nodeName !== "svg") return null;
+  svg.querySelectorAll("script, foreignObject, iframe").forEach(n => n.remove());
+  for (const n of [svg, ...svg.querySelectorAll("*")])
+    for (const a of [...n.attributes]) if (/^on/i.test(a.name) || /javascript:/i.test(a.value)) n.removeAttribute(a.name);
+  return svg;
+}
+
+function renderViz(spec) {
+  const type = (spec.type || "мысль").toLowerCase(), a = spec.args || [];
+  const box = document.createElement("div"); let ttl = spec.title || "";
+  const st = i => `style="animation-delay:${(i * .14).toFixed(2)}s"`;
+  switch (type) {
+    case "иконки": case "иконка": case "эмодзи": {
+      const items = splitItems(a.join(";")).map((it, i) => {
+        const m = it.match(/^([^\p{L}\p{N}]+)\s*(.*)$/u);
+        return `<div class="it pop" ${st(i)}><div class="em">${esc(m ? m[1].trim() : "✦")}</div><div class="cap">${esc(m ? m[2] : it)}</div></div>`;
+      });
+      box.innerHTML = `<div class="v-icons">${items.join("")}</div>`; break;
+    }
+    case "схема": case "процесс": case "цепочка": {
+      const nodes = a.join(" ").split(/\s*(?:->|→|=>)\s*/).filter(Boolean);
+      box.innerHTML = `<div class="v-flow">${nodes.map((n, i) => (i ? `<span class="ar pop" ${st(i * 2 - 1)}>➜</span>` : "") +
+        `<span class="nd pop" ${st(i * 2)}>${esc(n)}</span>`).join("")}</div>`; break;
+    }
+    case "список": case "пункты": {
+      box.innerHTML = `<ul class="v-list">${splitItems(a.join(";")).map((x, i) => `<li class="pop" ${st(i)}>${esc(x)}</li>`).join("")}</ul>`; break;
+    }
+    case "число": case "цифра": {
+      box.innerHTML = `<div class="v-num"><div class="n">${esc(a[0] || "")}</div><div class="c">${esc(a[1] || "")}</div></div>`;
+      const n = box.querySelector(".n"), m = String(a[0] || "").match(/^([^\d-]*)(-?[\d\s]+(?:[.,]\d+)?)(.*)$/);
+      if (m) {
+        const target = parseFloat(m[2].replace(/\s/g, "").replace(",", ".")), dec = (m[2].split(/[.,]/)[1] || "").length, t0 = performance.now();
+        const fmt = v => v.toLocaleString("ru-RU", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+        const tick = () => { const p = Math.min(1, (performance.now() - t0) / 1100), e = 1 - (1 - p) ** 3;
+          n.textContent = m[1] + fmt(target * e) + m[3]; if (p < 1) requestAnimationFrame(tick); };
+        if (isFinite(target)) tick();
+      }
+      break;
+    }
+    case "график": case "сравнение": case "диаграмма": {
+      ttl = ttl || a[1] || "";
+      const rows = splitItems(a[0]).map(r => { const m = r.match(/^(.*?)[\s:=]+(-?\d+(?:[.,]\d+)?)\s*([^\d]*)$/);
+        return m ? { l: m[1], v: parseFloat(m[2].replace(",", ".")), u: m[3] } : null; }).filter(Boolean);
+      const mx = Math.max(...rows.map(r => Math.abs(r.v)), 1e-9);
+      box.innerHTML = `<div class="v-bars">${rows.map((r, i) => `<div class="row pop" ${st(i)}><span>${esc(r.l)}</span>
+        <div><div class="bar" data-w="${(Math.abs(r.v) / mx * 100).toFixed(1)}"></div></div><b>${esc(r.v + (r.u ? " " + r.u : ""))}</b></div>`).join("")}</div>`;
+      setTimeout(() => box.querySelectorAll(".bar").forEach(b => b.style.width = b.dataset.w + "%"), 120);
+      break;
+    }
+    case "код": { box.innerHTML = `<pre class="v-code">${esc(a.join(" | "))}</pre>`; break; }
+    case "svg": case "рисунок": {
+      const svg = sanitizeSvg(a.join("|"));
+      if (svg) { const d = document.createElement("div"); d.className = "v-svg pop"; d.appendChild(document.importNode(svg, true)); box.appendChild(d); }
+      else box.innerHTML = `<div class="v-thought">…</div>`;
+      break;
+    }
+    default: box.innerHTML = `<div class="v-thought pop">${esc([type === "мысль" ? "" : spec.type, ...a].filter(Boolean).join(" — "))}</div>`;
+  }
+  if (ttl) box.insertAdjacentHTML("afterbegin", `<div class="ttl">${esc(ttl)}</div>`);
+  return box;
+}
+
+function placeCard(s) {
+  const st = $("stage").getBoundingClientRect(), gap = Math.max(14, innerWidth * .012);
+  s.el.style.top = (s.y * innerHeight) + "px";
+  if (s.side === "r") { s.el.style.left = (st.right + gap) + "px"; s.el.style.right = ""; }
+  else { s.el.style.right = (innerWidth - st.left + gap) + "px"; s.el.style.left = ""; }
+  // пузырьки: от края карточки к виску
+  requestAnimationFrame(() => {
+    const r = s.el.getBoundingClientRect(), pt = SVG.createSVGPoint();
+    pt.x = s.side === "r" ? 100 : -100; pt.y = -120;
+    const p = pt.matrixTransform(SVG.getScreenCTM());
+    const sx = s.side === "r" ? r.left : r.right, sy = Math.min(Math.max(p.y, r.top + 20), r.bottom - 20);
+    s.dots.forEach((d, i) => {
+      const f = (i + 1) / 4, sz = 16 - i * 4;
+      d.style.width = d.style.height = sz + "px";
+      d.style.left = (sx + (p.x - sx) * f - sz / 2) + "px"; d.style.top = (sy + (p.y - sy) * f - sz / 2) + "px";
+    });
+  });
+}
+
+function removeSlot(s) {
+  if (!s.el) return;
+  const e = s.el, ds = s.dots; s.el = null; s.dots = [];
+  e.classList.add("off"); ds.forEach(d => d.classList.remove("on"));
+  setTimeout(() => { e.remove(); ds.forEach(d => d.remove()); }, 600);
+}
+function clearViz() { vizSlots.forEach(removeSlot); }
+
+function showViz(spec) {
+  if ((spec.type || "").toLowerCase() === "очистить") return clearViz();
+  let s = vizSlots.find(x => !x.el);
+  if (!s) { s = vizSlots.reduce((a, b) => a.t < b.t ? a : b); removeSlot(s); }
+  const card = renderViz(spec); card.classList.add("viz"); document.body.appendChild(card);
+  s.el = card; s.t = performance.now();
+  s.dots = [0, 1, 2].map(() => { const d = document.createElement("div"); d.className = "dot"; $("trails").appendChild(d); return d; });
+  placeCard(s);
+  s.dots.forEach((d, i) => setTimeout(() => d.classList.add("on"), 120 * (2 - i)));
+  setTimeout(() => card.classList.add("on"), 380);
+}
+window.showViz = showViz; window.clearViz = clearViz;
+
+// ---------- аудио: VAD → STT → Hermes → TTS ----------
+let actx, micStream, micAnalyser, rec, chunks = [], recording = false, silenceSince = 0, voiceSince = 0, busy = false;
+const THR = 0.035, SILENCE_MS = 1300, MIN_VOICE_MS = 250;
+function rms(an) { const a = new Float32Array(an.fftSize); an.getFloatTimeDomainData(a); let s = 0; for (const v of a) s += v * v; return Math.sqrt(s / a.length); }
+
+async function start() {
+  $("start")?.remove();
+  actx = actx || new AudioContext();
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+    const src = actx.createMediaStreamSource(micStream);
+    micAnalyser = actx.createAnalyser(); micAnalyser.fftSize = 1024; src.connect(micAnalyser);
+    setInterval(vadTick, 50);
+  } catch (e) { console.error("mic", e); }
+  if (!location.search.includes("quiet"))
+    say([{ emotion: "злость", text: "Вы не готовы. Шучу. Я на связи.", viz: [{ type: "мысль", args: ["Новое лицо. Новый голос. Те же мозги."] }] }]);
+}
+$("start").onclick = start;
+window.startAvatar = start;
+if (location.search.includes("auto")) start();
+
+function vadTick() {
+  micLvl = rms(micAnalyser);
+  if (busy) return;
+  const now = performance.now();
+  if (micLvl > THR) { silenceSince = 0; if (!recording) { if (!voiceSince) voiceSince = now; if (now - voiceSince > 120) beginRec(); } }
+  else { voiceSince = 0; if (recording) { if (!silenceSince) silenceSince = now; if (now - silenceSince > SILENCE_MS) endRec(); } }
+}
+function beginRec() {
+  recording = true; chunks = []; silenceSince = 0;
+  rec = new MediaRecorder(micStream, { mimeType: "audio/webm;codecs=opus" });
+  rec.ondataavailable = e => chunks.push(e.data); rec.onstop = onRecorded; rec.startedAt = performance.now(); rec.start();
+  setState("listening"); setEmotion("нейтрально");
+}
+function endRec() { recording = false; rec.stop(); }
+
+async function onRecorded() {
+  if (performance.now() - rec.startedAt < SILENCE_MS + MIN_VOICE_MS) { setState("idle"); return; }
+  busy = true; setState("thinking"); setEmotion("задумчивость");
+  try {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const { text } = await (await fetch("/stt", { method: "POST", body: blob })).json();
+    if (!text || text.length < 2) { busy = false; setState("idle"); setEmotion("нейтрально"); return; }
+    $("you").textContent = "ты: " + text;
+    const { parts } = await (await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })).json();
+    await say(parts);
+  } catch (e) { console.error(e); await say([{ emotion: "смущение", text: "Связь со мной оборвалась." }]); }
+}
+
+// ---------- Ф5.3: стриминг /tts_stream по предложениям (multipart/x-mixed-replace) ----------
+let _ttsAbort = null;
+let _bargeStopped = false;
+
+function _idxBytes(buf, needle, start) {
+  outer: for (let i = start; i <= buf.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) if (buf[i + j] !== needle[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+const _BOUNDARY = new TextEncoder().encode("--avatarwav");
+
+function _tryExtractPart(buf) {
+  const bStart = _idxBytes(buf, _BOUNDARY, 0);
+  if (bStart === -1) return null;
+  if (buf[bStart + 11] === 45 && buf[bStart + 12] === 45) return { final: true, consumed: bStart + 13 };
+  const hdrStart = bStart + 11 + 2;
+  const hdrEnd = _idxBytes(buf, new TextEncoder().encode("\r\n\r\n"), hdrStart);
+  if (hdrEnd === -1) return null;
+  const headerText = new TextDecoder().decode(buf.slice(hdrStart, hdrEnd));
+  const m = headerText.match(/Content-Length:\s*(\d+)/i);
+  if (!m) return null;
+  const len = parseInt(m[1], 10);
+  const bodyStart = hdrEnd + 4;
+  const bodyEnd = bodyStart + len;
+  if (buf.length < bodyEnd + 2) return null;
+  return { body: buf.slice(bodyStart, bodyEnd), consumed: bodyEnd + 2 };
+}
+
+function _concatBytes(a, b) {
+  const out = new Uint8Array(a.length + b.length); out.set(a, 0); out.set(b, a.length); return out;
+}
+
+async function streamAndPlay(text) {
+  _ttsAbort = new AbortController();
+  const resp = await fetch("/tts_stream", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }), signal: _ttsAbort.signal });
+  const reader = resp.body.getReader();
+  let buf = new Uint8Array(0);
+  while (true) {
+    if (_bargeStopped) { try { reader.cancel(); } catch {} return; }
+    const { done, value } = await reader.read();
+    if (value) buf = _concatBytes(buf, value);
+    let part;
+    while ((part = _tryExtractPart(buf))) {
+      buf = buf.slice(part.consumed);
+      if (part.final) return;
+      if (_bargeStopped) { try { reader.cancel(); } catch {} return; }
+      if (part.body.length) {
+        const abuf = await actx.decodeAudioData(part.body.buffer.slice(part.body.byteOffset, part.body.byteOffset + part.body.byteLength));
+        if (_bargeStopped) return;
+        setState("speaking");
+        await playBuf(abuf);
+      }
+    }
+    if (done) break;
+  }
+}
+
+function stopSpeaking() {
+  _bargeStopped = true;
+  if (_ttsAbort) { try { _ttsAbort.abort(); } catch {} }
+  if (window._curSrc) { try { window._curSrc.stop(); } catch {} window._curSrc = null; }
+  talk = 0; setState("idle"); busy = false;
+}
+
+(function connectBargeIn() {
+  try {
+    const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/barge_in_ws");
+    ws.onmessage = ev => { try { const m = JSON.parse(ev.data);
+      if (m.event === "speech_start" && busy) stopSpeaking(); } catch {} };
+    ws.onclose = () => setTimeout(connectBargeIn, 3000);
+    ws.onerror = () => {};
+  } catch (e) { console.error("barge-in ws", e); }
+})();
+
+async function say(parts) {
+  busy = true; actx = actx || new AudioContext(); _bargeStopped = false;
+  if (parts.some(p => p.viz && p.viz.length)) clearViz();
+  $("sub").textContent = "";
+  for (let i = 0; i < parts.length; i++) {
+    if (_bargeStopped) break;
+    setEmotion(parts[i].emotion);
+    (parts[i].viz || []).forEach((v, j) => setTimeout(() => showViz(v), j * 450));
+    if (parts[i].text) $("sub").textContent += (i ? " " : "") + parts[i].text;
+    if (!parts[i].text) continue;
+    try { await streamAndPlay(parts[i].text); } catch (e) { if (e.name !== "AbortError") console.error(e); }
+    if (_bargeStopped) break;
+  }
+  talk = 0; setState("idle");
+  setTimeout(() => { if (!busy) setEmotion("нейтрально"); }, 3000);
+  busy = false;
+}
+window.say = say;
+
+function playBuf(buf) {
+  return new Promise(res => {
+    const src = actx.createBufferSource(); src.buffer = buf; window._curSrc = src;
+    const an = actx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = .3;
+    src.connect(an); an.connect(actx.destination);
+    const fr = new Uint8Array(an.frequencyBinCount), hz = actx.sampleRate / an.fftSize;
+    const iv = setInterval(() => {
+      const v = Math.min(1, rms(an) * 5.5); talk += (v - talk) * .6;
+      an.getByteFrequencyData(fr);
+      let lo = 0, mid = 0, hi = 0, num = 0, den = 0;
+      for (let i = 1; i < fr.length; i++) { const f = i * hz, m = fr[i]; if (f < 700) lo += m; else if (f < 2500) mid += m; else if (f < 8000) hi += m; num += f * m; den += m; }
+      const cen = den ? num / den : 0, tot = lo + mid + hi + 1;
+      const round = talk > .08 ? Math.max(0, Math.min(1, (lo / tot - .45) * 3)) : 0;
+      const wide = talk > .05 ? Math.max(0, Math.min(1, (hi / tot - .15) * 3 + (cen > 2500 ? .3 : 0))) : 0;
+      vis.open += (talk * (1 - wide * .4) - vis.open) * .5; vis.round += (round - vis.round) * .5; vis.wide += (wide - vis.wide) * .5;
+    }, 25);
+    src.onended = () => { clearInterval(iv); talk = 0; vis.open = vis.round = vis.wide = 0; window._curSrc = null; res(); };
+    src.start();
+  });
+}
+
+// ---------- внешний канал: любая сессия Гермеса может говорить и рисовать через /push ----------
+try {
+  const es = new EventSource("/events");
+  es.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type === "say") { if (!busy) say(m.parts); }
+    else if (m.type === "viz") (m.viz || []).forEach((v, j) => setTimeout(() => showViz(v), j * 450));
+    else if (m.type === "clear") clearViz();
+    else if (m.type === "emotion") setEmotion(m.emotion);
+  };
+} catch (e) { console.error(e); }
+
+addEventListener("keydown", e => {
+  if (e.code === "KeyR") fetch("/reset", { method: "POST" }).then(() => { $("sub").textContent = "Память диалога очищена."; clearViz(); });
+  if (e.code === "KeyC") clearViz();
+});
+layout();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+[{"emotion": "радость", "text": "Привет!", "viz": [], "emo": [{"name": "радость", "weight": 0.7}], "gestures": []}, {"emotion": "радость", "text": "Я тут.", "viz": [], "emo": [], "gestures": ["wave"]}, {"emotion": "страх", "text": "Что это?", "viz": [], "emo": [{"name": "интерес", "weight": 0.6}, {"name": "страх", "weight": 0.3}], "gestures": []}]
+[{"emotion": "радость", "text": "Ответ сорок два.", "viz": [{"type": "число", "args": ["42", "ответ"]}], "emo": [{"name": "радость", "weight": 1.0}], "gestures": []}]
+[{"emotion": "задумчивость", "text": "Хм.", "viz": [], "emo": [{"name": "интерес", "weight": 1.0}], "gestures": []}]
+[{"emotion": "нейтрально", "text": "Текст", "viz": [], "emo": [], "gestures": []}, {"emotion": "гордость", "text": "в конце", "viz": [], "emo": [{"name": "гордость", "weight": 1.0}], "gestures": []}]

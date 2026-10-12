@@ -1,0 +1,3 @@
+NVIDIA GeForce RTX 3050 Ti Laptop GPU, 4096 MiB, 2334 MiB, 1489 MiB
+683979, 1156 MiB, /home/odi/.hermes/hermes-agent/venv/bin/python
+684223, 786 MiB, /home/odi/.hermes/hermes-agent/venv/bin/python

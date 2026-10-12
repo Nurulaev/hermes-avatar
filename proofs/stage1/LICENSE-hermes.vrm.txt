@@ -1,0 +1,17 @@
+Источник: pixiv/three-vrm, examples/models/VRM1_Constraint_Twist_Sample.vrm
+URL: https://github.com/pixiv/three-vrm/raw/dev/packages/three-vrm/examples/models/VRM1_Constraint_Twist_Sample.vrm
+Лицензия модели (встроенный VRMC_vrm.meta, прочитано из файла):
+  авторы: pixiv Inc.
+  avatarPermission: everyone
+  commercialUsage: corporation
+  allowRedistribution: true
+  modification: allowModificationRedistribution
+  creditNotation: unnecessary
+  licenseUrl: https://vrm.dev/licenses/1.0/
+Лицензия репозитория: MIT.
+Вывод: открытая лицензия, можно использовать/редактировать/коммерчески, указание авторства не требуется.
+Ограничение: это тестовая VRM 1.0 модель со стандартными VRM-пресетами мимики
+(aa/ih/ou/ee/oh визема, happy/angry/sad/relaxed/surprised/neutral эмоции, blink,
+lookUp/Down/Left/Right) — НЕ полный ARKit-набор 52 blendshape. Для полного ARKit
+perfect-sync нужна отдельная VRM-модель с кастомными expression-пресетами
+(VRoid Hub/booth) — задача этапа 2 (кастомизация образа).

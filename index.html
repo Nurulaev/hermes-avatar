@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Гермес</title>
+<style>
+  :root { --c: #7fd4ff; --c2: #b9ecff; --dim: #24465a; --mid: #3f7894; --bg: #04070a; }
+  html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50% 45%, #0a1520 0%, var(--bg) 70%); overflow: hidden;
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; color: var(--c); }
+  body::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(127,212,255,.035) 0 1px, transparent 1px 3px); }
+  #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  svg { width: min(86vh, 86vw); height: min(86vh, 86vw); filter: drop-shadow(0 0 5px rgba(127,212,255,.5)); }
+  .ln  { fill: none; stroke: var(--c); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .fn  { fill: none; stroke: var(--mid); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  .dim { fill: none; stroke: var(--dim); stroke-width: 1.2; stroke-linecap: round; }
+  .hud { fill: var(--mid); font-size: 7px; letter-spacing: 1px; }
+  #status { position: absolute; top: 18px; left: 22px; font-size: 13px; letter-spacing: .2em; opacity: .8; }
+  #emo { position: absolute; top: 18px; right: 22px; font-size: 13px; letter-spacing: .2em; opacity: .6; }
+  #sub { position: absolute; bottom: 6vh; left: 10vw; right: 10vw; text-align: center;
+    font-size: 20px; line-height: 1.45; min-height: 3em; opacity: .92; text-shadow: 0 0 6px rgba(127,212,255,.4); }
+  #you { position: absolute; bottom: 2vh; left: 10vw; right: 10vw; text-align: center; font-size: 13px; opacity: .45; }
+  #start { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(5,8,11,.85); font-size: 18px; letter-spacing: .25em; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="stage">
+<svg viewBox="-200 -200 400 400">
+  <defs>
+    <clipPath id="clipL" clipPathUnits="userSpaceOnUse"><path id="cpL"/></clipPath>
+    <clipPath id="clipR" clipPathUnits="userSpaceOnUse"><path id="cpR"/></clipPath>
+    <clipPath id="clipM" clipPathUnits="userSpaceOnUse"><path id="cpM"/></clipPath>
+    <radialGradient id="irisG"><stop offset="0" stop-color="#0b2533"/><stop offset=".55" stop-color="#1d5f7d"/><stop offset="1" stop-color="#7fd4ff"/></radialGradient>
+    <pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+      <line x1="0" y1="0" x2="0" y2="4" stroke="#ff9db8" stroke-width="1.2"/></pattern>
+  </defs>
+
+  <!-- HUD-рамка -->
+  <circle class="dim" r="188"/>
+  <g id="ticks"></g>
+  <circle id="ring" class="ln" r="188" stroke-dasharray="40 1300"/>
+  <text class="hud" x="-182" y="-150">HRM-01</text>
+  <text class="hud" id="hudR" x="132" y="-150">SYNC</text>
+
+  <!-- шея и плечи -->
+  <g id="body">
+    <path class="fn" d="M-42,128 C-44,150 -46,165 -52,180"/>
+    <path class="fn" d="M42,128 C44,150 46,165 52,180"/>
+    <path class="dim" d="M-14,150 L0,168 L14,150"/>
+    <path class="fn" d="M-52,180 C-90,186 -140,194 -175,205"/>
+    <path class="fn" d="M52,180 C90,186 140,194 175,205"/>
+  </g>
+
+  <g id="head">
+    <!-- уши -->
+    <g id="ears">
+      <path class="fn" d="M-112,-30 C-132,-38 -140,-8 -134,14 C-130,30 -122,40 -110,38"/>
+      <path class="dim" d="M-116,-20 C-128,-22 -130,-2 -125,12 C-122,20 -117,24 -112,22"/>
+      <path class="fn" d="M112,-30 C132,-38 140,-8 134,14 C130,30 122,40 110,38"/>
+      <path class="dim" d="M116,-20 C128,-22 130,-2 125,12 C122,20 117,24 112,22"/>
+    </g>
+
+    <!-- контур лица -->
+    <path id="face" class="ln" d="M0,-168 C66,-168 112,-126 116,-58 C118,-22 116,8 108,36 C99,78 70,118 34,140 C18,150 -18,150 -34,140 C-70,118 -99,78 -108,36 C-116,8 -118,-22 -116,-58 C-112,-126 -66,-168 0,-168 Z"/>
+
+    <!-- волосы -->
+    <g id="hair">
+      <path class="ln" d="M-116,-58 C-124,-140 -60,-186 4,-182 C70,-180 124,-140 116,-58"/>
+      <path class="fn" d="M-110,-70 C-96,-112 -50,-128 -6,-120 C34,-136 84,-120 108,-74"/>
+      <path class="fn" d="M-92,-132 C-70,-116 -52,-112 -30,-118"/>
+      <path class="fn" d="M-50,-170 C-40,-148 -26,-132 -6,-120"/>
+      <path class="fn" d="M10,-178 C14,-156 22,-140 40,-128"/>
+      <path class="fn" d="M60,-168 C64,-150 76,-136 94,-124"/>
+      <path class="dim" d="M-104,-96 C-108,-80 -110,-70 -112,-58"/>
+      <path class="dim" d="M104,-96 C108,-80 110,-70 112,-58"/>
+    </g>
+
+    <!-- черты лица -->
+    <g id="features">
+      <g id="wrinkles" opacity="0">
+        <path class="fn" d="M-46,-98 Q0,-108 46,-98"/>
+        <path class="fn" d="M-38,-88 Q0,-97 38,-88"/>
+        <path class="dim" d="M-30,-79 Q0,-86 30,-79"/>
+      </g>
+      <g id="frown" opacity="0">
+        <path class="fn" d="M-7,-66 C-8,-58 -8,-52 -6,-46"/>
+        <path class="fn" d="M7,-66 C8,-58 8,-52 6,-46"/>
+      </g>
+
+      <path class="dim" d="M-84,-46 C-70,-62 -30,-64 -14,-44"/>
+      <path class="dim" d="M84,-46 C70,-62 30,-64 14,-44"/>
+
+      <path id="browL" class="ln" style="stroke-width:4.5"/>
+      <path id="browL2" class="fn"/>
+      <path id="browR" class="ln" style="stroke-width:4.5"/>
+      <path id="browR2" class="fn"/>
+
+      <g id="eyeL">
+        <path id="creaseL" class="fn"/>
+        <g clip-path="url(#clipL)">
+          <circle id="irisL" r="12.5" fill="url(#irisG)" stroke="var(--c)" stroke-width="1.2"/>
+          <circle id="pupL" r="5.2" fill="#02070a"/>
+          <circle id="glintL" r="2.2" fill="#e8fbff"/>
+          <path id="lidShadeL" fill="rgba(4,7,10,.55)"/>
+        </g>
+        <path id="eyeOL" class="ln"/>
+        <path id="lowerL" class="fn"/>
+        <path id="bagL" class="dim"/>
+      </g>
+      <g id="eyeR">
+        <path id="creaseR" class="fn"/>
+        <g clip-path="url(#clipR)">
+          <circle id="irisR" r="12.5" fill="url(#irisG)" stroke="var(--c)" stroke-width="1.2"/>
+          <circle id="pupR" r="5.2" fill="#02070a"/>
+          <circle id="glintR" r="2.2" fill="#e8fbff"/>
+          <path id="lidShadeR" fill="rgba(4,7,10,.55)"/>
+        </g>
+        <path id="eyeOR" class="ln"/>
+        <path id="lowerR" class="fn"/>
+        <path id="bagR" class="dim"/>
+      </g>
+
+      <path class="dim" d="M-92,18 C-80,10 -64,10 -52,16"/>
+      <path class="dim" d="M92,18 C80,10 64,10 52,16"/>
+      <ellipse id="blushL" cx="-66" cy="34" rx="20" ry="9" fill="url(#hatch)" opacity="0"/>
+      <ellipse id="blushR" cx="66" cy="34" rx="20" ry="9" fill="url(#hatch)" opacity="0"/>
+
+      <g id="nose">
+        <path class="fn" d="M-9,-38 C-10,-14 -12,8 -17,26"/>
+        <path class="dim" d="M9,-38 C10,-14 12,8 15,22"/>
+        <path id="nostrils" class="ln"/>
+        <path class="fn" d="M-6,40 C-2,43 2,43 6,40"/>
+      </g>
+
+      <path id="nasoL" class="fn"/>
+      <path id="nasoR" class="fn"/>
+      <path class="dim" d="M-5,46 L-6,56 M5,46 L6,56"/>
+
+      <g id="mouthG">
+        <path id="mouthIn" fill="#02070a"/>
+        <g clip-path="url(#clipM)">
+          <path id="teeth" fill="none" stroke="#cfefff" stroke-width="7" opacity="0"/>
+          <path id="tongue" fill="#123447" opacity="0"/>
+        </g>
+        <path id="lipU" class="ln"/>
+        <path id="lipL" class="ln"/>
+        <path id="lipLine" class="ln" style="stroke-width:2"/>
+        <path id="lipShade" class="dim"/>
+      </g>
+
+      <path id="chin" class="dim" d="M-18,124 Q0,133 18,124"/>
+
+      <g id="dots" opacity="0">
+        <circle cx="-16" cy="-140" r="3" fill="var(--c)"/><circle cx="0" cy="-140" r="3" fill="var(--c)"/><circle cx="16" cy="-140" r="3" fill="var(--c)"/>
+      </g>
+    </g>
+  </g>
+</svg>
+</div>
+<div id="status">ОЖИДАНИЕ</div>
+<div id="emo">НЕЙТРАЛЬНО</div>
+<div id="sub"></div>
+<div id="you"></div>
+<div id="start">НАЖМИ, ЧТОБЫ РАЗБУДИТЬ ГЕРМЕСА</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const S = (id, attr, v) => $(id).setAttribute(attr, v);
+
+(() => { let h = ""; for (let i = 0; i < 72; i++) { const a = i * 5 * Math.PI / 180, r1 = 188, r2 = i % 6 ? 183 : 177;
+  h += `<line x1="${Math.cos(a)*r1}" y1="${Math.sin(a)*r1}" x2="${Math.cos(a)*r2}" y2="${Math.sin(a)*r2}" stroke="#24465a" stroke-width="1"/>`; }
+  $("ticks").innerHTML = h; })();
+
+// ---------- мимика ----------
+// brow: подъём; tilt: + сведены к центру (злость), − домиком (грусть); eye: раскрытие; squint: нижнее веко;
+// smile: изгиб рта; mw: ширина; jaw: раскрытие; wr: морщины лба; fr: складки между бровей; blush; flare: ноздри
+const EMO = {
+  "нейтрально":   { brow: 0,  tilt: 0,   eye: 1.0,  squint: 0,   smile: 0.12, mw: 1.0,  jaw: 0,  wr: 0,   fr: 0,   blush: 0,   flare: 0 },
+  "радость":      { brow: 5,  tilt: -2,  eye: 0.9,  squint: 0.6, smile: 1.0,  mw: 1.18, jaw: 3,  wr: 0,   fr: 0,   blush: .25, flare: 0 },
+  "грусть":       { brow: 4,  tilt: -11, eye: 0.72, squint: 0.1, smile: -0.75,mw: 0.88, jaw: 0,  wr: 0.4, fr: 0.2, blush: 0,   flare: 0 },
+  "удивление":    { brow: 15, tilt: 0,   eye: 1.35, squint: 0,   smile: 0.0,  mw: 0.62, jaw: 12, wr: 1,   fr: 0,   blush: 0,   flare: 0.3 },
+  "задумчивость": { brow: 3,  tilt: 6,   eye: 0.78, squint: 0.3, smile: -0.12,mw: 0.78, jaw: 0,  wr: 0,   fr: 0.6, blush: 0,   flare: 0 },
+  "злость":       { brow: -7, tilt: 13,  eye: 0.88, squint: 0.4, smile: -0.55,mw: 1.02, jaw: 0,  wr: 0,   fr: 1,   blush: 0,   flare: 1 },
+  "смущение":     { brow: 3,  tilt: -6,  eye: 0.7,  squint: 0.4, smile: 0.4,  mw: 0.82, jaw: 0,  wr: 0,   fr: 0,   blush: 1,   flare: 0 },
+};
+const cur = { ...EMO["нейтрально"] }, tgt = { ...cur };
+let state = "idle";
+let talk = 0, talkShape = 0;
+let micLvl = 0;
+let blink = 0, nextBlink = performance.now() + 2500;
+let gaze = { x: 0, y: 0 }, gazeT = { x: 0, y: 0 }, nextGaze = 0;
+let headTurn = 0, headTurnT = 0;
+
+function setEmotion(e) {
+  if (!EMO[e]) e = "нейтрально";
+  Object.assign(tgt, EMO[e]);
+  $("emo").textContent = e.toUpperCase();
+}
+function setState(s) {
+  state = s;
+  $("status").textContent = { idle: "ОЖИДАНИЕ", listening: "СЛУШАЮ", thinking: "ДУМАЮ", speaking: "ГОВОРЮ" }[s];
+  $("hudR").textContent = { idle: "IDLE", listening: "REC", thinking: "PROC", speaking: "VOX" }[s];
+  $("dots").setAttribute("opacity", s === "thinking" ? 1 : 0);
+}
+
+// миндалевидный глаз; side = −1 левый / +1 правый
+function eyeShape(open, squint, side) {
+  const w = 30, up = 22 * open, lo = 12 * Math.max(0.15, open) * (1 - squint * 0.55);
+  const ox = w * side, oy = -3, ix = -w * side, iy = 2;
+  const upper = `M${ix},${iy} C${ix + 10*side},${iy - up} ${ox - 12*side},${oy - up} ${ox},${oy}`;
+  const lower = `C${ox - 10*side},${oy + lo} ${ix + 10*side},${iy + lo} ${ix},${iy}`;
+  return { full: upper + " " + lower + " Z", upper, lower: `M${ox},${oy} ` + lower, up, lo, ix, iy, ox, oy };
+}
+
+function drawEye(k, side, open, squint, gx, gy, t) {
+  const e = eyeShape(open, squint, side);
+  S("cp" + k, "d", e.full);
+  S("eyeO" + k, "d", e.upper);
+  S("lower" + k, "d", e.lower);
+  const cu = Math.max(e.up, 6) + 7;
+  S("crease" + k, "d", `M${e.ix + 2*side},${e.iy - 6} C${e.ix + 12*side},${-cu - 2} ${e.ox - 12*side},${-cu - 4} ${e.ox + 3*side},${e.oy - 5}`);
+  S("bag" + k, "d", `M${e.ix + 4*side},${e.iy + 12 - squint*3} C${e.ix + 14*side},${e.lo + 12} ${e.ox - 12*side},${e.lo + 10} ${e.ox - 2*side},${e.oy + 9}`);
+  S("lidShade" + k, "d", `M-40,-40 L40,-40 L40,${-e.up * 0.45} L-40,${-e.up * 0.45} Z`);
+  const pr = 5.2 + (state === "listening" ? 1.2 : 0) + Math.sin(t / 900) * 0.3;
+  S("iris" + k, "cx", gx); S("iris" + k, "cy", gy + 1);
+  S("pup" + k, "cx", gx); S("pup" + k, "cy", gy + 1); S("pup" + k, "r", pr);
+  S("glint" + k, "cx", gx + 4); S("glint" + k, "cy", gy - 3);
+}
+
+function frame(t) {
+  for (const k in tgt) cur[k] += (tgt[k] - cur[k]) * 0.08;
+
+  if (t > nextBlink) { blink = 1; nextBlink = t + (Math.random() < 0.15 ? 250 : 2200 + Math.random() * 3500); }
+  blink = Math.max(0, blink - 0.11);
+  const blinkF = blink > 0 ? Math.sin(blink * Math.PI) : 0;
+
+  if (t > nextGaze) {
+    if (state === "thinking") { gazeT = { x: -8 + Math.random() * 3, y: -7 }; headTurnT = -6; }
+    else if (state === "listening") { gazeT = { x: 0, y: 0 }; headTurnT = 0; }
+    else if (state === "speaking") { gazeT = { x: (Math.random() - .5) * 6, y: (Math.random() - .5) * 2 }; headTurnT = (Math.random() - .5) * 6; }
+    else { gazeT = { x: (Math.random() - .5) * 14, y: (Math.random() - .5) * 5 }; headTurnT = gazeT.x * 0.5; }
+    nextGaze = t + (state === "idle" ? 1400 + Math.random() * 2600 : state === "speaking" ? 900 : 600);
+  }
+  gaze.x += (gazeT.x - gaze.x) * 0.18; gaze.y += (gazeT.y - gaze.y) * 0.18;
+  headTurn += (headTurnT - headTurn) * 0.04;
+  const mx = Math.sin(t / 137) * 0.4, my = Math.cos(t / 173) * 0.3;
+
+  const open = Math.max(0.04, cur.eye * (1 - blinkF) * (state === "listening" ? 1.08 : 1));
+  const squint = Math.min(1, cur.squint + talk * 0.15 * cur.smile);
+  S("eyeL", "transform", "translate(-46,-18)");
+  S("eyeR", "transform", "translate(46,-18)");
+  drawEye("L", -1, open, squint, gaze.x + mx, gaze.y + my, t);
+  drawEye("R", 1, open, squint, gaze.x + mx, gaze.y + my, t);
+
+  const by = -56 - cur.brow - (state === "listening" ? 2 : 0) + talk * cur.brow * 0.2, tl = cur.tilt;
+  S("browL",  "d", `M-80,${by + 6 - tl * 0.55} C-66,${by - 8 - tl*0.3} -38,${by - 8 + tl * 0.3} -16,${by + tl * 1.05}`);
+  S("browL2", "d", `M-76,${by + 9 - tl * 0.55} C-62,${by - 2 - tl*0.2} -38,${by - 3 + tl * 0.3} -18,${by + 4 + tl * 1.05}`);
+  S("browR",  "d", `M80,${by + 6 - tl * 0.55} C66,${by - 8 - tl*0.3} 38,${by - 8 + tl * 0.3} 16,${by + tl * 1.05}`);
+  S("browR2", "d", `M76,${by + 9 - tl * 0.55} C62,${by - 2 - tl*0.2} 38,${by - 3 + tl * 0.3} 18,${by + 4 + tl * 1.05}`);
+  S("wrinkles", "opacity", Math.min(1, cur.wr + Math.max(0, cur.brow - 8) * 0.06));
+  S("frown", "opacity", Math.min(1, cur.fr));
+  S("blushL", "opacity", cur.blush * 0.7); S("blushR", "opacity", cur.blush * 0.7);
+
+  const fl = cur.flare * 3 + (state === "speaking" ? talk * 1.5 : 0) + Math.sin(t / 1400) * 0.6;
+  S("nostrils", "d", `M-20,30 C${-24 - fl},38 -14,44 -6,40 M20,30 C${24 + fl},38 14,44 6,40`);
+
+  // ---- рот ----
+  const speaking = state === "speaking";
+  const openM = cur.jaw + (speaking ? talk * 26 : 0);
+  const w = 40 * cur.mw * (speaking ? 1 + talkShape * 0.18 - talk * 0.12 : 1);
+  const y0 = 72, c = cur.smile * 12;
+  const cy = y0 - c * 0.55;
+  const midU = y0 - 2 + (openM > 1 ? -openM * 0.18 : 0);
+  const midL = y0 + c * 0.5 + openM * 0.82;
+  S("lipU", "d", `M${-w},${cy} C${-w*0.6},${y0 - 7} -12,${y0 - 11} -4,${y0 - 8} Q0,${y0 - 6} 4,${y0 - 8} C12,${y0 - 11} ${w*0.6},${y0 - 7} ${w},${cy}`);
+  const inner = `M${-w},${cy} Q0,${midU + c * 0.6} ${w},${cy}` + (openM > 1.2 ? ` Q0,${midL} ${-w},${cy} Z` : "");
+  S("lipLine", "d", inner);
+  S("mouthIn", "d", openM > 1.2 ? inner : "");
+  S("cpM", "d", openM > 1.2 ? inner : "M0,0");
+  S("teeth", "d", `M${-w*0.7},${midU + c*0.6 - 1} Q0,${midU + c*0.6 + 3} ${w*0.7},${midU + c*0.6 - 1}`);
+  S("teeth", "opacity", openM > 4 ? Math.min(0.85, (openM - 4) / 8) : 0);
+  S("tongue", "d", `M${-w*0.5},${midL + 2} Q0,${midL - openM*0.45} ${w*0.5},${midL + 2} Z`);
+  S("tongue", "opacity", openM > 10 ? 0.9 : 0);
+  const lb = midL + 12 - Math.min(4, openM * 0.1);
+  S("lipL", "d", `M${-w + 4},${cy + 2} C${-w*0.5},${lb} ${w*0.5},${lb} ${w - 4},${cy + 2}`);
+  S("lipShade", "d", `M-14,${lb + 5} Q0,${lb + 9} 14,${lb + 5}`);
+  const nd = Math.max(0, cur.smile) * 6;
+  S("nasoL", "d", `M-24,30 C${-36 - nd},44 ${-42 - nd},58 ${-w - 6},${cy + 4}`);
+  S("nasoR", "d", `M24,30 C${36 + nd},44 ${42 + nd},58 ${w + 6},${cy + 4}`);
+  S("nasoL", "opacity", 0.35 + Math.max(0, cur.smile) * 0.65);
+  S("nasoR", "opacity", 0.35 + Math.max(0, cur.smile) * 0.65);
+  S("chin", "transform", `translate(0,${openM * 0.35})`);
+
+  // ---- голова ----
+  const breathe = Math.sin(t / 1500) * 1.8;
+  const nod = state === "listening" ? Math.sin(t / 380) * 2.2 * Math.min(1, micLvl * 6) : 0;
+  const speakBob = speaking ? Math.sin(t / 260) * talk * 1.6 : 0;
+  const tilt = (state === "thinking" ? -5 : 0) + (speaking ? Math.sin(t / 900) * 1.4 : 0) + Math.sin(t / 4100) * 0.6;
+  S("head", "transform", `translate(${headTurn * 0.6},${breathe + nod + speakBob}) rotate(${tilt})`);
+  S("features", "transform", `translate(${headTurn * 0.9},${gaze.y * 0.15})`);
+  S("hair", "transform", `translate(${headTurn * 0.3},0)`);
+  S("ears", "transform", `translate(${-headTurn * 0.5},0)`);
+  S("body", "transform", `translate(${headTurn * 0.15},${breathe * 0.6})`);
+
+  const ring = $("ring");
+  ring.setAttribute("transform", `rotate(${(t / (state === "thinking" ? 4 : 20)) % 360})`);
+  const ringLen = state === "listening" ? 40 + micLvl * 900 : speaking ? 40 + talk * 500 : 40;
+  ring.setAttribute("stroke-dasharray", `${ringLen} 1300`);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---------- аудио ----------
+let actx, micStream, micAnalyser, rec, chunks = [], recording = false, silenceSince = 0, voiceSince = 0;
+let busy = false;
+const THR = 0.035, SILENCE_MS = 1300, MIN_VOICE_MS = 250;
+
+function rms(an) {
+  const a = new Float32Array(an.fftSize); an.getFloatTimeDomainData(a);
+  let s = 0; for (const v of a) s += v * v; return Math.sqrt(s / a.length);
+}
+
+async function start() {
+  $("start").remove();
+  actx = new AudioContext();
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+  const src = actx.createMediaStreamSource(micStream);
+  micAnalyser = actx.createAnalyser(); micAnalyser.fftSize = 1024; src.connect(micAnalyser);
+  setInterval(vadTick, 50);
+  say([{ emotion: "радость", text: "Я на связи. Говори." }]);
+}
+$("start").onclick = start;
+if (location.search.includes("auto")) start().catch(e => console.error(e));
+
+function vadTick() {
+  micLvl = rms(micAnalyser);
+  if (busy) return;
+  const now = performance.now();
+  if (micLvl > THR) {
+    silenceSince = 0;
+    if (!recording) {
+      if (!voiceSince) voiceSince = now;
+      if (now - voiceSince > 120) beginRec();
+    }
+  } else {
+    voiceSince = 0;
+    if (recording) {
+      if (!silenceSince) silenceSince = now;
+      if (now - silenceSince > SILENCE_MS) endRec();
+    }
+  }
+}
+
+function beginRec() {
+  recording = true; chunks = []; silenceSince = 0;
+  rec = new MediaRecorder(micStream, { mimeType: "audio/webm;codecs=opus" });
+  rec.ondataavailable = e => chunks.push(e.data);
+  rec.onstop = onRecorded;
+  rec.startedAt = performance.now();
+  rec.start();
+  setState("listening"); setEmotion("нейтрально");
+}
+function endRec() { recording = false; rec.stop(); }
+
+async function onRecorded() {
+  if (performance.now() - rec.startedAt < SILENCE_MS + MIN_VOICE_MS) { setState("idle"); return; }
+  busy = true; setState("thinking"); setEmotion("задумчивость");
+  try {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const { text } = await (await fetch("/stt", { method: "POST", body: blob })).json();
+    if (!text || text.length < 2) { busy = false; setState("idle"); setEmotion("нейтрально"); return; }
+    $("you").textContent = "ты: " + text;
+    const { parts } = await (await fetch("/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })).json();
+    await say(parts);
+  } catch (e) {
+    console.error(e); await say([{ emotion: "смущение", text: "Связь со мной оборвалась." }]);
+  }
+}
+
+// ---------- Ф5.3: стриминг /tts_stream по предложениям (multipart/x-mixed-replace) ----------
+let _ttsAbort = null;
+let _bargeStopped = false;
+
+function _idxBytes(buf, needle, start) {
+  outer: for (let i = start; i <= buf.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) if (buf[i + j] !== needle[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+const _BOUNDARY = new TextEncoder().encode("--avatarwav");
+
+function _tryExtractPart(buf) {
+  const bStart = _idxBytes(buf, _BOUNDARY, 0);
+  if (bStart === -1) return null;
+  if (buf[bStart + 11] === 45 && buf[bStart + 12] === 45) return { final: true, consumed: bStart + 13 };
+  const hdrStart = bStart + 11 + 2; // boundary + \r\n
+  const hdrEnd = _idxBytes(buf, new TextEncoder().encode("\r\n\r\n"), hdrStart);
+  if (hdrEnd === -1) return null;
+  const headerText = new TextDecoder().decode(buf.slice(hdrStart, hdrEnd));
+  const m = headerText.match(/Content-Length:\s*(\d+)/i);
+  if (!m) return null;
+  const len = parseInt(m[1], 10);
+  const bodyStart = hdrEnd + 4;
+  const bodyEnd = bodyStart + len;
+  if (buf.length < bodyEnd + 2) return null;
+  return { body: buf.slice(bodyStart, bodyEnd), consumed: bodyEnd + 2 };
+}
+
+function _concatBytes(a, b) {
+  const out = new Uint8Array(a.length + b.length); out.set(a, 0); out.set(b, a.length); return out;
+}
+
+// Стримит /tts_stream, проигрывая каждое предложение сразу по готовности (не ждёт весь текст).
+async function streamAndPlay(text) {
+  _ttsAbort = new AbortController();
+  const resp = await fetch("/tts_stream", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }), signal: _ttsAbort.signal });
+  const reader = resp.body.getReader();
+  let buf = new Uint8Array(0);
+  while (true) {
+    if (_bargeStopped) { try { reader.cancel(); } catch {} return; }
+    const { done, value } = await reader.read();
+    if (value) buf = _concatBytes(buf, value);
+    let part;
+    while ((part = _tryExtractPart(buf))) {
+      buf = buf.slice(part.consumed);
+      if (part.final) return;
+      if (_bargeStopped) { try { reader.cancel(); } catch {} return; }
+      if (part.body.length) {
+        const abuf = await actx.decodeAudioData(part.body.buffer.slice(part.body.byteOffset, part.body.byteOffset + part.body.byteLength));
+        if (_bargeStopped) return;
+        setState("speaking");
+        await playBuf(abuf);
+      }
+    }
+    if (done) break;
+  }
+}
+
+// Barge-in: прерывает текущее воспроизведение и поток /tts_stream.
+function stopSpeaking() {
+  _bargeStopped = true;
+  if (_ttsAbort) { try { _ttsAbort.abort(); } catch {} }
+  if (window._curSrc) { try { window._curSrc.stop(); } catch {} window._curSrc = null; }
+  talk = 0; setState("idle"); busy = false;
+}
+
+(function connectBargeIn() {
+  try {
+    const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/barge_in_ws");
+    ws.onmessage = ev => { try { const m = JSON.parse(ev.data);
+      if (m.event === "speech_start" && busy) stopSpeaking(); } catch {} };
+    ws.onclose = () => setTimeout(connectBargeIn, 3000);
+    ws.onerror = () => {};
+  } catch (e) { console.error("barge-in ws", e); }
+})();
+
+async function say(parts) {
+  busy = true; _bargeStopped = false;
+  $("sub").textContent = "";
+  for (let i = 0; i < parts.length; i++) {
+    if (_bargeStopped) break;
+    setEmotion(parts[i].emotion);
+    $("sub").textContent += (i ? " " : "") + parts[i].text;
+    try { await streamAndPlay(parts[i].text); } catch (e) { if (e.name !== "AbortError") console.error(e); }
+    if (_bargeStopped) break;
+  }
+  talk = 0; setState("idle");
+  setTimeout(() => { setEmotion("нейтрально"); }, 2500);
+  busy = false;
+}
+
+// липсинк: громкость → раскрытие, баланс высоких/низких частот → ширина («и» vs «о»)
+function playBuf(buf) {
+  return new Promise(res => {
+    const src = actx.createBufferSource(); src.buffer = buf; window._curSrc = src;
+    const an = actx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.5;
+    src.connect(an); an.connect(actx.destination);
+    const fb = new Uint8Array(an.frequencyBinCount);
+    const iv = setInterval(() => {
+      const v = Math.min(1, rms(an) * 5); talk += (v - talk) * 0.6;
+      an.getByteFrequencyData(fb);
+      let lo = 0, hi = 0; for (let i = 3; i < 25; i++) lo += fb[i]; for (let i = 60; i < 180; i++) hi += fb[i];
+      lo /= 22; hi /= 120;
+      const shape = lo + hi > 10 ? Math.max(-1, Math.min(1, (hi * 2.2 - lo) / (lo + 1))) : 0;
+      talkShape += (shape - talkShape) * 0.4;
+    }, 30);
+    src.onended = () => { clearInterval(iv); talk = 0; talkShape = 0; window._curSrc = null; res(); };
+    src.start();
+  });
+}
+
+addEventListener("keydown", e => {
+  if (e.code === "KeyR") fetch("/reset", { method: "POST" }).then(() => { $("sub").textContent = "Память диалога очищена."; });
+});
+</script>
+</body>
+</html>
