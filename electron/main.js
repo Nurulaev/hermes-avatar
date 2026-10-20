@@ -10,6 +10,8 @@ const os = require('os');
 
 const AVATAR_PORT = process.env.AVATAR_PORT || '8765';
 const BASE_URL = `http://127.0.0.1:${AVATAR_PORT}`;
+// Стиль рендера: ascii — зелёная ASCII-«Матрица» на чёрном во весь экран (по умолчанию) | pbr — прозрачный 3D поверх стола.
+const AVATAR_STYLE = process.env.AVATAR_STYLE === 'pbr' ? 'pbr' : 'ascii';
 
 // Ф2: профиль внешности persist в ~/.config/hermes-avatar/look.json; кастомные .vrm
 // копируются в assets/imported и раздаются тем же aiohttp-статиком, что и штатные модели —
@@ -27,6 +29,7 @@ let pttActive = false;
 function urlForMode(mode) {
   const u = new URL('/vrm', BASE_URL);
   u.searchParams.set('mode', mode === 'mini' ? 'mini' : 'full');
+  u.searchParams.set('style', AVATAR_STYLE);
   if (process.env.AVATAR_DEBUG) u.searchParams.set('debug', '1');
   return u.toString();
 }
@@ -57,8 +60,13 @@ function destroyWin() {
 }
 
 function makeFullWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  const w = new BrowserWindow(commonWinOpts({ width, height, x: 0, y: 0 }));
+  // ASCII — настоящий полноэкранный режим поверх панели задач на непрозрачном чёрном;
+  // pbr — прозрачное окно на рабочую область, как раньше.
+  const ascii = AVATAR_STYLE === 'ascii';
+  const d = screen.getPrimaryDisplay();
+  const { x, y, width, height } = ascii ? d.bounds : { x: 0, y: 0, ...d.workAreaSize };
+  const w = new BrowserWindow(commonWinOpts(Object.assign({ width, height, x, y },
+    ascii ? { transparent: false, backgroundColor: '#000000', fullscreenable: true, fullscreen: true } : {})));
   win = w;
   w.setIgnoreMouseEvents(false);
   w.loadURL(urlForMode('full'));

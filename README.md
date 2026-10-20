@@ -33,6 +33,13 @@ More screenshots: [proofs/](proofs/) (per-stage acceptance evidence, logs, WER/l
 - **VRM 1.0 rendering** via three.js + `@pixiv/three-vrm`: spring-bone hair
   physics, PBR materials, HDRI lighting, bloom/SSAO/ACES tonemap, adaptive
   quality to hold 60 fps.
+- **ASCII "Matrix" look (default)** — fullscreen black screen with green
+  digital rain; the avatar, Hermes in procedural bronze armor with a winged
+  helmet, is drawn in glyphs by brightness (one GPU shader pass). An automatic
+  "camera operator" cuts between angles (wide, 3/4, close-up, low) and moves
+  closer when the avatar speaks. Keys: `A` toggles ASCII/3D, `C` toggles the
+  camera, `E` opens the editor. `AVATAR_STYLE=pbr` restores the transparent
+  3D look; URL params `?style=`, `?cell=9`, `?armor=0`, `?director=0`.
 - **Appearance editor** — drag & drop any `.vrm`, tweak skin/hair/eye color,
   clothing, face-shape morphs, save/restore presets (`look.json`).
 - **12 blendable emotions + gestures** driven by inline LLM tags

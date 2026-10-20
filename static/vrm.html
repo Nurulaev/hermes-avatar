@@ -44,6 +44,21 @@
   #bgModes button { background: rgba(10,18,26,.55); border: 1px solid #2c5a72; color: #9fd8f5; font: inherit;
     font-size: 10px; padding: 4px 7px; border-radius: 5px; cursor: pointer; letter-spacing: .04em; }
   #bgModes button.active { background: #2c5a72; color: #fff; }
+
+  /* ASCII-«Матрица»: чёрный экран, зелёный интерфейс; фон рисует сам шейдер */
+  body.ascii { background: #000 !important; color: #00ff41; }
+  body.ascii #bgModes, body.ascii #hudOverlay { display: none; }
+  body.ascii #editorToggle, body.ascii #editor, body.ascii #editor button {
+    border-color: #0b5d1e; color: #00ff41; background: rgba(0,12,2,.78); }
+  body.ascii #editor button.active { background: #0b5d1e; color: #d8ffe0; }
+  body.ascii #editor h3 { border-color: #0b3d14; }
+  body.ascii .ts-panel { background: rgba(0,10,2,.88) !important; border-color: rgba(0,255,65,.55) !important;
+    box-shadow: 0 0 22px rgba(0,255,65,.18), inset 0 0 26px rgba(0,255,65,.06) !important; color: #b8ffc8 !important;
+    border-radius: 2px !important; }
+  body.ascii .ts-panel .v-num .n, body.ascii .ts-panel .v-thought, body.ascii .ts-panel .v-code { color: #d8ffe0 !important; }
+  body.ascii .ts-panel .v-flow .ar, body.ascii .ts-panel .v-list li::before { color: #00ff41 !important; }
+  body.ascii .ts-panel .v-flow .nd { background: rgba(0,255,65,.1) !important; border-color: rgba(0,255,65,.55) !important; }
+  body.ascii .ts-panel .v-bars .bar { background: linear-gradient(90deg, #0b5d1e, #00ff41) !important; }
 </style>
 <script type="importmap">
 { "imports": {
@@ -104,6 +119,8 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
 import { AvatarMotion } from "/static/avatar-motion.js";
 import { ThoughtSpace, ToolCallGraph, BackgroundModes } from "/static/thought-space.js";
+import { AsciiMatrix, CameraDirector } from "/static/ascii-matrix.js";
+import { addHermesArmor } from "/static/hermes-armor.js";
 
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -114,6 +131,11 @@ const motion = new AvatarMotion();
 document.body.classList.toggle("mini", MODE === "mini");
 const DEFAULT_VRM = qs.get("vrm") || "/assets/hermes.vrm";
 const DEBUG = qs.has("debug");
+// Стиль: ascii — зелёная ASCII-«Матрица» на чёрном (по умолчанию) | pbr — обычный 3D-рендер. Клавиша A.
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+let STYLE = qs.get("style") || lsGet("hermes-style") || "ascii";
+const ARMOR = qs.get("armor") !== "0";                 // доспехи Гермеса (?armor=0 — без них)
 
 // ---------- рендерер / сцена ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
@@ -163,6 +185,19 @@ function buildComposer() {
 }
 buildComposer();
 
+// ---------- ASCII-«Матрица» + оператор камеры (ракурсы меняются сами; клавиша C — вкл/выкл) ----------
+const asciiCell = parseFloat(qs.get("cell")) || (MODE === "mini" ? 6 : 9);
+let ascii = null;
+const director = new CameraDirector(camera);
+if (DEBUG) Object.assign(window, { __camera: camera, __director: director });
+director.enabled = MODE !== "mini" && qs.get("director") !== "0";
+function setStyle(style) {
+  STYLE = style === "pbr" ? "pbr" : "ascii"; lsSet("hermes-style", STYLE);
+  document.body.classList.toggle("ascii", STYLE === "ascii");
+  if (STYLE === "ascii" && !ascii) ascii = new AsciiMatrix(renderer, { cell: asciiCell });
+  if (STYLE !== "ascii" && currentVrm) frameCamera(currentVrm);   // вернуть статичный кадр
+}
+
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
@@ -201,6 +236,7 @@ function handleSseMsg(m) {
       }, delay);
       delay += (p.text || "").length * 70;
     });
+    if (STYLE === "ascii") director.cue();                 // реплика — оператор берёт план ближе
     const p0 = (m.parts || [])[0];
     if (p0 && !(p0.emo || []).length && p0.emotion) setEmotion(p0.emotion, 1);
   } else if (m.type === "emotion") setEmotion(m.emotion, m.weight ?? 1);
@@ -263,6 +299,7 @@ function frameCamera(vrm) {
   camera.position.set(0, centerY, dist * faceSign);
   camera.lookAt(0, centerY, 0);
   thoughtSpace.setFrame(topY, bottomY, faceSign);
+  director.setFrame({ centerY, halfExtent, faceSign, headY: headW ? headW.y + 0.04 : topY - 0.14 });
 }
 
 function loadVRM(url) {
@@ -279,6 +316,11 @@ function loadVRM(url) {
       currentModelUrl = url;
       scene.add(vrm.scene);
       restPose(vrm);
+      if (ARMOR) {
+        try {
+          addHermesArmor(vrm, vrm.meta?.metaVersion === "0" ? -1 : 1);
+        } catch (e) { console.warn("доспехи не собрались", e); }
+      }
       motion.attach(vrm, scene);
       for (const [n, w] of Object.entries(emotionWeights)) motion.setEmotion(n, w);
       frameCamera(vrm);
@@ -333,6 +375,8 @@ window.avatar = {
   pushToolcall: (stage, label) => toolGraph.push(stage, label),
   clearToolcalls: () => toolGraph.clear(),
   setBgMode: m => bgModes.set(m),
+  setStyle, getStyle: () => STYLE,
+  cutCamera: name => director.cut(name),
   getBgMode: () => bgModes.mode,
 };
 
@@ -429,7 +473,7 @@ function swappableGroups(vrm) {
       if (!m?.name) continue;
       const mm = m.name.match(/_([A-Za-z]+)_\d+_(CLOTH|HAIR|ACCESSORY)\b/i);
       if (!mm) continue;
-      const label = /^HAIR/i.test(mm[2]) ? "Причёска" : mm[1];
+      const label = /^HAIR/i.test(mm[2]) ? "Причёска" : mm[1] === "Armor" ? "Доспехи" : mm[1];
       (groups[label] || (groups[label] = new Set())).add(o);
     }
   });
@@ -484,7 +528,8 @@ function buildNodeList(vrm) {
   for (const label of labels) {
     const meshes = [...groups[label]];
     const key = "@node:" + label;
-    const visible = lookState.morphs[key] !== undefined ? !!lookState.morphs[key] : true;
+    // под шлемом причёска по умолчанию скрыта (включается в редакторе)
+    const visible = lookState.morphs[key] !== undefined ? !!lookState.morphs[key] : !(ARMOR && label === "Причёска");
     meshes.forEach(o => { o.visible = visible; });
     lookState.morphs[key] = visible ? 1 : 0;
     const row = document.createElement("div"); row.className = "row";
@@ -572,13 +617,20 @@ $("btnOpenFile").onclick = async () => {
   const url = await window.avatarLook.importVRM(srcPath);
   if (url) await loadVRM(url).catch(() => {});
 };
-addEventListener("keydown", e => { if (e.key === "e" || e.key === "E") $("editor").classList.toggle("open"); });
+addEventListener("keydown", e => {
+  if (e.target.closest?.("input, textarea")) return;
+  const k = e.key.toLowerCase();
+  if (k === "e" || k === "у") $("editor").classList.toggle("open");
+  else if (k === "a" || k === "ф") setStyle(STYLE === "ascii" ? "pbr" : "ascii");
+  else if (k === "c" || k === "с") { director.enabled = !director.enabled; if (!director.enabled && currentVrm) frameCamera(currentVrm); }
+});
 
 async function initLook() {
   await loadVRM(DEFAULT_VRM).catch(() => {});
   const saved = window.avatarLook?.load ? await window.avatarLook.load() : null;
   if (saved) await applySavedLook(saved);
 }
+setStyle(STYLE);
 initLook();
 
 // ---------- живость: моргание (остальное — дыхание, взгляд, тело, речь — в avatar-motion.js) ----------
@@ -608,7 +660,9 @@ let fAcc = 0, fN = 0, fpsShown = 0;
 function updateHud(dt) {
   fAcc += dt; fN++;
   if (fAcc >= 0.5) { fpsShown = Math.round(fN / fAcc); fAcc = 0; fN = 0; }
-  if ($("hud")) $("hud").textContent = `FPS ${fpsShown}  Q${quality.level}  PR${renderer.getPixelRatio().toFixed(2)}  ${window.__glRenderer || ""}`;
+  if ($("hud")) $("hud").textContent = STYLE === "ascii"
+    ? `FPS ${fpsShown}  ASCII ${asciiCell}px  КАМЕРА: ${director.enabled ? director.shot : "стоп"}`
+    : `FPS ${fpsShown}  Q${quality.level}  PR${renderer.getPixelRatio().toFixed(2)}  ${window.__glRenderer || ""}`;
   if (DEBUG) window.__fps = fpsShown;
 }
 
@@ -635,9 +689,15 @@ function frame() {
     currentVrm.update(dt);
   }
 
-  adaptQuality(dt);
-  updateHud(dt);
-  composer.render();
+  if (STYLE === "ascii") {
+    director.update();
+    updateHud(dt);
+    ascii.render(scene, camera, ts);
+  } else {
+    adaptQuality(dt);
+    updateHud(dt);
+    composer.render();
+  }
   thoughtSpace.update(dt);
   toolGraph.update(dt);
 }

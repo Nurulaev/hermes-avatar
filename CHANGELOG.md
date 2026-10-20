@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+
+- ASCII "Matrix" render style, now the default: fullscreen black background,
+  green digital rain, avatar drawn in glyphs by luminance (`static/ascii-matrix.js`).
+- Procedural Hermes armor (winged helmet, cuirass, pauldrons, vambraces, belt)
+  attached to VRM bones (`static/hermes-armor.js`); toggle "Доспехи" in the editor.
+- Automatic camera operator cycling through shots and cutting closer on speech.
+- `AVATAR_STYLE` env (`ascii` | `pbr`); the Electron full mode becomes a true
+  fullscreen opaque window in ASCII style.
+
 ## [0.1.0] — 2026-10-13
 
 First public release. Built as "Hermes Avatar v2" across stages Ф1–Ф7.
