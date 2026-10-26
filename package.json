@@ -12,6 +12,6 @@
   "type": "commonjs",
   "dependencies": {
     "@pixiv/three-vrm": "^3.5.5",
-    "electron": "^44.7.0"
+    "electron": "^45.0.0"
   }
 }
